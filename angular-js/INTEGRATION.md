@@ -1,0 +1,209 @@
+# Markdown Editor — Integración con AngularJS
+
+Esta guía explica cómo agregar el **Markdown Editor** (basado en
+[@gravity-ui/markdown-editor](https://github.com/gravity-ui/markdown-editor)) a
+una aplicación **AngularJS 1.x** usando los archivos publicados en la CDN.
+
+---
+
+## Archivos disponibles en la CDN
+
+> Los archivos están publicados en `https://r2.pagegear.co/js/markdown-editor/`
+> (CDN de producción del proyecto).
+
+| Archivo | Descripción |
+|---------|-------------|
+| `angular-markdown-editor.min.js` | Bundle principal (React + editor + directiva AngularJS) |
+| `angular-markdown-editor.min.css` | Estilos requeridos (gravity-ui theme + editor CSS) |
+| `vendors-node_modules_highlight_js_es_core_js.chunk.min.js` | Chunk cargado automáticamente para resaltado de código |
+| `vendors-node_modules_lowlight_index_js.chunk.min.js` | Chunk cargado automáticamente para el parser de lowlight |
+
+> **Nota sobre los chunks:** Los archivos `*.chunk.min.js` son cargados
+> **automáticamente** por el bundle principal cuando se necesita resaltado de
+> código (sintaxis). No es necesario incluirlos manualmente en tu HTML; sólo
+> deben estar accesibles en la misma ruta de la CDN.
+
+---
+
+## Instalación rápida
+
+### 1 — Incluir los archivos en tu HTML
+
+```html
+<!DOCTYPE html>
+<html lang="es" ng-app="miApp">
+<head>
+  <meta charset="UTF-8">
+  <title>Mi App con Markdown Editor</title>
+
+  <!-- 1. AngularJS 1.x -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/angular.js/1.8.3/angular.min.js"></script>
+
+  <!-- 2. Estilos del editor -->
+  <link rel="stylesheet"
+        href="https://r2.pagegear.co/js/markdown-editor/angular-markdown-editor.min.css">
+
+  <!-- 3. Bundle del editor (incluye React, gravity-ui y la directiva AngularJS) -->
+  <script src="https://r2.pagegear.co/js/markdown-editor/angular-markdown-editor.min.js"></script>
+</head>
+<body>
+  <!-- ... -->
+</body>
+</html>
+```
+
+### 2 — Registrar el módulo en tu aplicación
+
+```javascript
+angular.module('miApp', ['markdownEditor']);
+```
+
+### 3 — Usar la directiva en tus templates
+
+```html
+<markdown-editor ng-model="contenido"></markdown-editor>
+```
+
+---
+
+## Ejemplo completo
+
+```html
+<!DOCTYPE html>
+<html lang="es" ng-app="miApp">
+<head>
+  <meta charset="UTF-8">
+  <title>Mi App con Markdown Editor</title>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/angular.js/1.8.3/angular.min.js"></script>
+
+  <link rel="stylesheet"
+        href="https://r2.pagegear.co/js/markdown-editor/angular-markdown-editor.min.css">
+  <script src="https://r2.pagegear.co/js/markdown-editor/angular-markdown-editor.min.js"></script>
+
+  <style>
+    .editor-wrapper { height: 400px; }
+  </style>
+</head>
+<body ng-controller="EditorCtrl">
+
+  <h1>Editor de Markdown</h1>
+
+  <div class="editor-wrapper">
+    <markdown-editor
+      ng-model  = "documento"
+      options   = "opciones"
+      on-ready  = "alCargar($editor)"
+      on-submit = "guardar($value)"
+      autofocus>
+    </markdown-editor>
+  </div>
+
+  <p>Palabras: {{ contarPalabras() }}</p>
+  <button ng-click="guardar()">Guardar</button>
+
+  <script>
+    angular.module('miApp', ['markdownEditor'])
+
+      // Configuración global (opcional)
+      .config(function (markdownEditorConfigProvider) {
+        markdownEditorConfigProvider.setDefaults({
+          preset:         'default',
+          theme:          'light',
+          initialMode:    'wysiwyg',
+          toolbarVisible: true,
+          stickyToolbar:  true
+        });
+      })
+
+      .controller('EditorCtrl', function ($scope) {
+        var editor = null;
+
+        $scope.documento = '# Hola mundo\n\nEmpieza a escribir aquí...';
+        $scope.opciones  = { preset: 'default', theme: 'light' };
+
+        $scope.alCargar = function ($editor) {
+          editor = $editor;
+        };
+
+        $scope.contarPalabras = function () {
+          return ($scope.documento || '').trim().split(/\s+/).filter(Boolean).length;
+        };
+
+        $scope.guardar = function (valor) {
+          var contenido = valor || (editor && editor.getValue()) || $scope.documento;
+          console.log('Guardando:', contenido);
+          // aquí va tu lógica de guardado (ej. $http.post(...))
+        };
+      });
+  </script>
+</body>
+</html>
+```
+
+---
+
+## Referencia de la directiva
+
+```html
+<markdown-editor
+  ng-model   = "contenido"
+  options    = "opcionesEditor"
+  on-change  = "alCambiar($value)"
+  on-submit  = "alEnviar($value)"
+  on-cancel  = "alCancelar()"
+  on-ready   = "alCargar($editor)"
+  autofocus>
+</markdown-editor>
+```
+
+### Atributos
+
+| Atributo    | Tipo        | Descripción |
+|-------------|-------------|-------------|
+| `ng-model`  | `string`    | **Binding bidireccional** del contenido markdown. |
+| `options`   | `object`    | Opciones por instancia (ver tabla siguiente). |
+| `on-change` | expresión   | Se evalúa cada vez que cambia el contenido; `$value` tiene el nuevo markdown. |
+| `on-submit` | expresión   | Se evalúa al presionar **Ctrl+Enter**; `$value` tiene el contenido actual. |
+| `on-cancel` | expresión   | Se evalúa al presionar **Escape**. |
+| `on-ready`  | expresión   | Se evalúa al inicializar; `$editor` es la instancia del editor. |
+| `autofocus` | atributo    | Enfoca el editor al montar. |
+
+### Opciones disponibles
+
+| Clave            | Tipo      | Valor por defecto | Descripción |
+|------------------|-----------|-------------------|-------------|
+| `preset`         | `string`  | `'default'`       | Conjunto de funciones: `'zero'` · `'commonmark'` · `'default'` · `'yfm'` · `'full'` |
+| `initialMode`    | `string`  | `'wysiwyg'`       | Modo inicial: `'wysiwyg'` o `'markup'` |
+| `toolbarVisible` | `boolean` | `true`            | Mostrar barra de herramientas al cargar |
+| `stickyToolbar`  | `boolean` | `true`            | Barra de herramientas fija al hacer scroll |
+| `theme`          | `string`  | `'light'`         | Tema de color: `'light'` · `'dark'` · `'light-hc'` · `'dark-hc'` |
+| `mdOptions`      | `object`  | `{}`              | Opciones para markdown-it: `{ html, breaks, linkify }` |
+
+---
+
+## API del editor (instancia)
+
+Obtén la instancia del editor via `on-ready` y usa cualquiera de estos métodos:
+
+```javascript
+$scope.alCargar = function ($editor) {
+  $scope.editor = $editor;
+};
+
+// Leer / escribir contenido
+$scope.editor.getValue();                      // → string
+$scope.editor.replace('# Nuevo contenido');
+$scope.editor.append('\n\n## Pie de página');
+$scope.editor.prepend('> Nota importante\n\n');
+$scope.editor.clear();
+$scope.editor.isEmpty();                       // → boolean
+
+// Foco
+$scope.editor.focus();
+$scope.editor.hasFocus();                      // → boolean
+
+// Modo de edición
+$scope.editor.setEditorMode('wysiwyg');        // o 'markup'
+$scope.editor.currentMode;                     // → 'wysiwyg' | 'markup'
+```
