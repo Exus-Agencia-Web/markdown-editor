@@ -3,8 +3,6 @@ name: Build & Deploy AngularJS Module
 on:
   push:
     branches: [main]
-    paths:
-      - 'angular-js/**'
   workflow_dispatch:
 
 jobs:
