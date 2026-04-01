@@ -1,0 +1,72 @@
+name: Build & Deploy AngularJS Module
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'angular-js/**'
+  workflow_dispatch:
+
+jobs:
+  build-and-deploy:
+    name: Build, Upload to R2 & Purge Cache
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: angular-js/package-lock.json
+
+      - name: Install dependencies
+        working-directory: angular-js
+        run: npm ci
+
+      - name: Build production bundle
+        working-directory: angular-js
+        run: npm run build
+
+      - name: Upload .min files to Cloudflare R2
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.CLOUDFLARE_R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.CLOUDFLARE_R2_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: auto
+          R2_ENDPOINT: https://${{ secrets.CLOUDFLARE_ACCOUNT_ID }}.r2.cloudflarestorage.com
+          R2_BUCKET: ${{ secrets.CLOUDFLARE_R2_BUCKET }}
+        run: |
+          aws s3 cp angular-js/dist/ \
+            s3://${R2_BUCKET}/js/markdown-editor/ \
+            --endpoint-url "${R2_ENDPOINT}" \
+            --recursive \
+            --exclude "*" \
+            --include "*.min.js" \
+            --include "*.chunk.min.js" \
+            --cache-control "public, max-age=31536000, immutable" \
+            --content-type "application/javascript"
+
+      - name: Purge Cloudflare cache
+        env:
+          CF_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CF_ZONE_ID: ${{ secrets.CLOUDFLARE_ZONE_ID }}
+        run: |
+          # Collect the public URLs of every uploaded .min file
+          URLS=$(find angular-js/dist \( -name "*.min.js" -o -name "*.chunk.min.js" \) | \
+            sed 's|angular-js/dist/|https://r2.pagegear.co/js/markdown-editor/|' | \
+            jq -R . | jq -sc .)
+
+          curl -s -X POST \
+            "https://api.cloudflare.com/client/v4/zones/${CF_ZONE_ID}/purge_cache" \
+            -H "Authorization: Bearer ${CF_API_TOKEN}" \
+            -H "Content-Type: application/json" \
+            --data "{\"files\": ${URLS}}" | \
+            tee /tmp/purge-response.json
+
+          # Fail the step if Cloudflare reports an error
+          jq -e '.success == true' /tmp/purge-response.json
