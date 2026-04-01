@@ -1,6 +1,7 @@
 const path = require('path');
 const webpack = require('webpack');
 const MiniCssExtractPlugin = require('mini-css-extract-plugin');
+const CssMinimizerPlugin = require('css-minimizer-webpack-plugin');
 
 module.exports = (env, argv) => {
   const isProd = argv.mode === 'production';
@@ -9,6 +10,7 @@ module.exports = (env, argv) => {
     entry: './src/index.js',
     output: {
       path: path.resolve(__dirname, 'dist'),
+      publicPath: 'auto',
       filename: isProd ? 'angular-markdown-editor.min.js' : 'angular-markdown-editor.js',
       // Lazy-loaded chunks (e.g. highlight.js / lowlight) get predictable names.
       chunkFilename: isProd
@@ -88,7 +90,7 @@ module.exports = (env, argv) => {
     },
     plugins: [
       new MiniCssExtractPlugin({
-        filename: 'angular-markdown-editor.css',
+        filename: isProd ? 'angular-markdown-editor.min.css' : 'angular-markdown-editor.css',
       }),
       // Inject the `process` global required by CommonJS / older ESM packages.
       new webpack.ProvidePlugin({
@@ -97,6 +99,10 @@ module.exports = (env, argv) => {
     ],
     optimization: {
       minimize: isProd,
+      minimizer: [
+        '...', // keep default TerserPlugin for JS
+        new CssMinimizerPlugin(),
+      ],
       // Use human-readable chunk IDs for easier debugging and consistent
       // file names across builds.
       chunkIds: 'named',

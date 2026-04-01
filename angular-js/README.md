@@ -13,9 +13,9 @@ angular-js/
 ├── src/
 │   └── index.js                        Source of the AngularJS module/directive
 ├── dist/                               Pre-built bundles (ready to use)
-│   ├── angular-markdown-editor.js      Development build
-│   ├── angular-markdown-editor.min.js  Production build (minified)
-│   └── angular-markdown-editor.css     All required styles
+│   ├── angular-markdown-editor.min.js  Production JS bundle (minified)
+│   ├── angular-markdown-editor.js      Development JS bundle (readable)
+│   └── angular-markdown-editor.min.css All required styles (minified)
 ├── examples/
 │   ├── basic.html                      Minimal usage
 │   ├── ngmodel.html                    Two-way binding with ng-model
@@ -40,7 +40,7 @@ You only need to load **AngularJS** separately:
 <script src="https://cdnjs.cloudflare.com/ajax/libs/angular.js/1.4.6/angular.min.js"></script>
 
 <!-- 2. Editor styles (gravity-ui theme + markdown editor CSS) -->
-<link rel="stylesheet" href="dist/angular-markdown-editor.css">
+<link rel="stylesheet" href="dist/angular-markdown-editor.min.css">
 
 <!-- 3. Editor bundle — includes React, ReactDOM, gravity-ui, and the AngularJS module -->
 <script src="dist/angular-markdown-editor.min.js"></script>
@@ -210,7 +210,7 @@ Then open:
   <script src="https://cdnjs.cloudflare.com/ajax/libs/angular.js/1.4.6/angular.min.js"></script>
 
   <!-- 2. Load the editor bundle (styles + scripts) -->
-  <link rel="stylesheet" href="dist/angular-markdown-editor.css">
+  <link rel="stylesheet" href="dist/angular-markdown-editor.min.css">
   <script src="dist/angular-markdown-editor.min.js"></script>
 
   <style>
@@ -305,7 +305,7 @@ Build output:
 |------|-------------|
 | `dist/angular-markdown-editor.min.js` | Production JS bundle (minified) |
 | `dist/angular-markdown-editor.js` | Development JS bundle (readable) |
-| `dist/angular-markdown-editor.css` | All required CSS (gravity-ui theme + editor styles) |
+| `dist/angular-markdown-editor.min.css` | All required CSS (gravity-ui theme + editor styles) |
 
 ### What is bundled
 
