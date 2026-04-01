@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Markdown Editor – Advanced Configuration</title>
+
+  <!-- 1. AngularJS 1.4.6 -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/angular.js/1.4.6/angular.min.js"></script>
+
+  <!-- 2. Editor styles -->
+  <link rel="stylesheet" href="../dist/angular-markdown-editor.css">
+
+  <!-- 3. Editor bundle -->
+  <script src="../dist/angular-markdown-editor.min.js"></script>
+
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      margin: 0;
+      padding: 24px;
+      background: #f5f5f5;
+    }
+    h1, h2 { color: #222; margin-top: 0; }
+    p { color: #555; }
+
+    /* ---- top controls ---- */
+    .controls {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      align-items: center;
+      margin-bottom: 14px;
+      padding: 12px 16px;
+      background: #fff;
+      border: 1px solid #d9d9d9;
+      border-radius: 6px;
+    }
+    .controls label { display: flex; align-items: center; gap: 6px; font-size: 14px; }
+    .controls select {
+      padding: 5px 8px;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      font-size: 14px;
+    }
+    .status { margin-left: auto; font-size: 13px; color: #777; }
+
+    /* ---- editor ---- */
+    .editor-wrap {
+      height: 480px;
+      border: 1px solid #d9d9d9;
+      border-radius: 6px;
+      overflow: hidden;
+      background: #fff;
+      box-shadow: 0 1px 3px rgba(0,0,0,.08);
+      margin-bottom: 14px;
+    }
+
+    /* ---- action bar ---- */
+    .actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+      margin-bottom: 14px;
+    }
+    .actions button {
+      padding: 7px 14px;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      background: #fff;
+      cursor: pointer;
+      font-size: 14px;
+    }
+    .actions button.primary {
+      background: #1a73e8;
+      color: #fff;
+      border-color: #1a73e8;
+    }
+    .actions button:hover:not(.primary) { background: #f0f0f0; }
+    .actions button.primary:hover { background: #1565c0; }
+    .actions .info { font-size: 13px; color: #777; margin-left: auto; }
+
+    /* ---- log ---- */
+    .log-panel {
+      background: #1e1e1e;
+      color: #d4d4d4;
+      border-radius: 6px;
+      padding: 12px 16px;
+      font-family: 'Courier New', monospace;
+      font-size: 12px;
+      max-height: 160px;
+      overflow-y: auto;
+    }
+    .log-panel .entry { margin: 2px 0; }
+    .log-panel .ts { color: #808080; margin-right: 6px; }
+  </style>
+</head>
+<body ng-app="advancedApp" ng-controller="AdvancedCtrl">
+
+  <h1>Markdown Editor – Advanced Configuration</h1>
+  <p>
+    Demonstrates global provider configuration, live theme/preset switching,
+    programmatic API via the <code>on-ready</code> callback, and the event log.
+  </p>
+
+  <!--
+    Live controls – updating `editorOptions` re-passes the options to the directive.
+    Note: theme and preset changes take effect on the next editor mount (page reload)
+    because the underlying editor instance is initialised once. For a full re-mount
+    you can use ng-if to destroy and recreate the directive.
+  -->
+  <div class="controls">
+    <label>
+      Theme:
+      <select ng-model="theme" ng-change="applyOptions()">
+        <option value="light">Light</option>
+        <option value="dark">Dark</option>
+        <option value="light-hc">Light High Contrast</option>
+        <option value="dark-hc">Dark High Contrast</option>
+      </select>
+    </label>
+    <label>
+      Preset:
+      <select ng-model="preset" ng-change="applyOptions()">
+        <option value="zero">zero</option>
+        <option value="commonmark">commonmark</option>
+        <option value="default">default</option>
+        <option value="yfm">yfm</option>
+        <option value="full">full</option>
+      </select>
+    </label>
+    <span class="status" ng-if="lastSaved">💾 Saved at {{ lastSaved }}</span>
+    <span class="status" ng-if="!lastSaved">Not saved yet</span>
+  </div>
+
+  <!--
+    on-ready  – receives the raw editor instance so we can call its API directly.
+    on-change – called on every keystroke; used for word/char count.
+    on-submit – called on Ctrl+Enter; used for "save".
+    on-cancel – called on Escape.
+  -->
+  <div class="editor-wrap">
+    <markdown-editor
+      ng-model   = "content"
+      options    = "editorOptions"
+      on-ready   = "onEditorReady($editor)"
+      on-change  = "onContentChange($value)"
+      on-submit  = "onSave($value)"
+      on-cancel  = "onCancel()"
+      autofocus>
+    </markdown-editor>
+  </div>
+
+  <div class="actions">
+    <button class="primary" ng-click="saveContent()">Save (Ctrl+Enter)</button>
+    <button ng-click="resetContent()">Reset</button>
+    <button ng-click="insertSnippet()">Insert Snippet</button>
+    <button ng-click="appendSection()">Append Section</button>
+    <button ng-click="focusEditor()">Focus Editor</button>
+    <span class="info">{{ wordCount }} words · {{ charCount }} chars</span>
+  </div>
+
+  <h2>Event Log</h2>
+  <div class="log-panel">
+    <div class="entry" ng-repeat="entry in log track by $index">
+      <span class="ts">{{ entry.time }}</span>{{ entry.msg }}
+    </div>
+    <div ng-if="!log.length" style="color:#808080">No events yet.</div>
+  </div>
+
+  <script>
+    /**
+     * Configure the markdownEditorConfigProvider BEFORE any controller runs.
+     * This sets global defaults that apply to every <markdown-editor> instance
+     * unless overridden by the per-instance `options` attribute.
+     */
+    angular.module('advancedApp', ['markdownEditor'])
+      .config(['markdownEditorConfigProvider', function (cfg) {
+        cfg.setDefaults({
+          toolbarVisible: true,
+          stickyToolbar:  true
+        });
+      }])
+
+      .controller('AdvancedCtrl', ['$scope', '$filter', function ($scope, $filter) {
+        var editorRef    = null;
+        var originalContent = '';
+
+        /* ---- theme / preset ---- */
+        $scope.theme  = 'light';
+        $scope.preset = 'default';
+
+        /* ---- stats / log ---- */
+        $scope.wordCount = 0;
+        $scope.charCount = 0;
+        $scope.lastSaved = null;
+        $scope.log       = [];
+
+        function addLog(msg) {
+          var now = new Date();
+          var ts  = [now.getHours(), now.getMinutes(), now.getSeconds()]
+                      .map(function (n) { return ('0' + n).slice(-2); })
+                      .join(':');
+          $scope.log.unshift({ time: ts, msg: msg });
+          if ($scope.log.length > 50) { $scope.log.pop(); }
+        }
+
+        /* ---- initial content ---- */
+        $scope.content =
+          '# Advanced Markdown Editor\n\n' +
+          'This example shows **advanced configuration** options for the\n' +
+          '`@gravity-ui/markdown-editor` AngularJS directive.\n\n' +
+          '## Available Events\n\n' +
+          '| Event | Attribute | `$` argument |\n' +
+          '|-------|-----------|--------------|\n' +
+          '| Content changed | `on-change` | `$value` (string) |\n' +
+          '| Submit shortcut | `on-submit` | `$value` (string) |\n' +
+          '| Cancel shortcut | `on-cancel` | — |\n' +
+          '| Editor ready | `on-ready` | `$editor` (instance) |\n\n' +
+          '## Programmatic API\n\n' +
+          'Use the `$editor` instance received from `on-ready` to call:\n\n' +
+          '```javascript\n' +
+          'editor.getValue();          // get current markdown\n' +
+          'editor.replace(markup);     // replace all content\n' +
+          'editor.append(markup);      // append to end\n' +
+          'editor.prepend(markup);     // prepend to start\n' +
+          'editor.clear();             // clear content\n' +
+          'editor.focus();             // focus the editor\n' +
+          'editor.setEditorMode(mode); // "wysiwyg" or "markup"\n' +
+          '```\n';
+
+        originalContent = $scope.content;
+
+        /* ---- options passed to the directive ---- */
+        $scope.editorOptions = {
+          preset: $scope.preset,
+          theme:  $scope.theme
+        };
+
+        $scope.applyOptions = function () {
+          // Re-assign the whole object so Angular detects the change.
+          $scope.editorOptions = {
+            preset: $scope.preset,
+            theme:  $scope.theme
+          };
+          addLog('Options updated – preset: ' + $scope.preset + ', theme: ' + $scope.theme);
+        };
+
+        /* ---- directive callbacks ---- */
+        $scope.onEditorReady = function (editor) {
+          editorRef = editor;
+          addLog('on-ready → editor instance received');
+        };
+
+        $scope.onContentChange = function (value) {
+          var words = value.trim() ? value.trim().split(/\s+/).length : 0;
+          $scope.wordCount = words;
+          $scope.charCount = value.length;
+        };
+
+        $scope.onSave = function (value) {
+          $scope.lastSaved = new Date().toLocaleTimeString();
+          addLog('on-submit → saved ' + value.length + ' chars');
+        };
+
+        $scope.onCancel = function () {
+          addLog('on-cancel → Escape pressed');
+        };
+
+        /* ---- button actions (use programmatic editor API) ---- */
+        $scope.saveContent = function () {
+          if (!editorRef) { return; }
+          var value = editorRef.getValue();
+          $scope.lastSaved = new Date().toLocaleTimeString();
+          addLog('Manual save → ' + value.length + ' chars');
+          window.alert('Saved ' + value.length + ' characters!');
+        };
+
+        $scope.resetContent = function () {
+          $scope.content = originalContent;
+          addLog('Content reset to original');
+        };
+
+        $scope.insertSnippet = function () {
+          if (!editorRef) { return; }
+          editorRef.prepend(
+            '> **Snippet inserted programmatically** via `editor.prepend()`\n\n'
+          );
+          addLog('Snippet prepended via editor.prepend()');
+        };
+
+        $scope.appendSection = function () {
+          if (!editorRef) { return; }
+          editorRef.append(
+            '\n\n## Appended Section\n\nThis section was added via `editor.append()`.\n'
+          );
+          addLog('Section appended via editor.append()');
+        };
+
+        $scope.focusEditor = function () {
+          if (!editorRef) { return; }
+          editorRef.focus();
+          addLog('editor.focus() called');
+        };
+      }]);
+  </script>
+</body>
+</html>
