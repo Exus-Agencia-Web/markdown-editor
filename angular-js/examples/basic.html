@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Markdown Editor – Basic Example</title>
+
+  <!-- 1. AngularJS 1.4.6 -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/angular.js/1.4.6/angular.min.js"></script>
+
+  <!-- 2. Editor styles (includes gravity-ui and markdown-editor CSS) -->
+  <link rel="stylesheet" href="../dist/angular-markdown-editor.css">
+
+  <!-- 3. Editor bundle (includes React, ReactDOM, gravity-ui/uikit, and
+          @gravity-ui/markdown-editor – the only external dependency is angular) -->
+  <script src="../dist/angular-markdown-editor.min.js"></script>
+
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      margin: 0;
+      padding: 24px;
+      background: #f5f5f5;
+    }
+    h1 { color: #222; margin-top: 0; }
+    p  { color: #555; }
+    .editor-wrap {
+      height: 420px;
+      border: 1px solid #d9d9d9;
+      border-radius: 6px;
+      overflow: hidden;
+      background: #fff;
+      box-shadow: 0 1px 3px rgba(0,0,0,.08);
+    }
+  </style>
+</head>
+<body ng-app="basicApp" ng-controller="BasicCtrl">
+
+  <h1>Markdown Editor – Basic Example</h1>
+  <p>
+    A minimal AngularJS 1.x integration using the <code>&lt;markdown-editor&gt;</code>
+    directive. No ng-model or callbacks – just the editor in its default configuration.
+  </p>
+
+  <div class="editor-wrap">
+    <!--
+      Simple usage: just drop the element into your template.
+      The `options` attribute accepts an object to customise the editor.
+    -->
+    <markdown-editor options="editorOptions"></markdown-editor>
+  </div>
+
+  <script>
+    angular.module('basicApp', ['markdownEditor'])
+      .controller('BasicCtrl', ['$scope', function ($scope) {
+        $scope.editorOptions = {
+          preset: 'default',    // 'zero' | 'commonmark' | 'default' | 'yfm' | 'full'
+          initialMode: 'wysiwyg', // 'wysiwyg' | 'markup'
+          theme: 'light'          // 'light' | 'dark' | 'light-hc' | 'dark-hc'
+        };
+      }]);
+  </script>
+</body>
+</html>

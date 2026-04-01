@@ -1,0 +1,11 @@
+node_modules/
+npm-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# Development bundle (large – run `npm run build:dev` to generate)
+dist/angular-markdown-editor.js
+dist/*.chunk.js
+
+# Local vendor copies for development/testing only (use CDN in production)
+vendor/
