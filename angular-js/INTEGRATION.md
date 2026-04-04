@@ -183,6 +183,9 @@ angular.module('miApp', ['markdownEditor']);
 | `lang`               | `string`   | `'en'`            | Idioma de la interfaz: `'en'` (inglés) o `'ru'` (ruso) |
 | `fileUploadHandler`  | `function` | `null`            | `function(File) → Promise<{url, name?, type?}>` — habilita subida de imágenes/archivos |
 | `extensionOptions`   | `object`   | `{}`              | Opciones por extensión, pasadas a `wysiwygConfig.extensionOptions` |
+| `mathEnabled`        | `boolean`  | `true`            | Registrar extensión de matemáticas LaTeX (chunk lazy) |
+| `mermaidEnabled`     | `boolean`  | `true`            | Registrar extensión de diagramas Mermaid (chunk lazy) |
+| `htmlBlockEnabled`   | `boolean`  | `true`            | Registrar extensión de bloques HTML (renderiza en iframes) |
 
 ---
 
@@ -265,3 +268,40 @@ $scope.opciones = {
 > ejemplo, entrada directa del usuario final), esto puede introducir vulnerabilidades XSS.
 > Usa esta opción únicamente con contenido de confianza (contenido interno del sistema o
 > previamente saneado) o aplica un proceso de sanitización antes de mostrarlo.
+
+---
+
+## Extensiones adicionales: LaTeX, Mermaid, HTML Block
+
+Con `preset: 'full'`, las extensiones LaTeX, Mermaid y HTML Block se registran
+automáticamente. Sus runtimes se cargan de forma lazy (chunks separados de webpack).
+
+Para deshabilitar una extensión específica:
+
+```javascript
+$scope.opciones = {
+  preset: 'full',
+  mathEnabled:      false,  // deshabilitar LaTeX
+  mermaidEnabled:   false,  // deshabilitar Mermaid
+  htmlBlockEnabled: false,  // deshabilitar HTML Block
+};
+```
+
+> ⚠️ **Seguridad:** El HTML Block renderiza contenido en iframes aislados. No lo habilites
+> con contenido de fuentes no confiables sin sanitización previa.
+
+---
+
+## Popups sobre modales Bootstrap 3
+
+Cuando el editor se encuentra dentro de un modal Bootstrap 3 (z-index `1050`), todos los
+popups de la barra de herramientas (tooltips, desplegables, selectores de color) aparecen
+automáticamente **sobre** el modal. El wrapper crea un `<div data-md-editor-portals>` en
+`document.body` con `z-index: 1070` y redirige todos los portales de gravity-ui hacia él.
+
+No se requiere configuración adicional. Si tus modales usan un z-index mayor a `1050`,
+agrega un override CSS:
+
+```css
+[data-md-editor-portals] { z-index: 1200 !important; }
+```

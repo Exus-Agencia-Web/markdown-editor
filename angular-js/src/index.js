@@ -11,9 +11,17 @@
 
 import React from 'react';
 import { createRoot } from 'react-dom/client';
-import { ThemeProvider, ToasterProvider } from '@gravity-ui/uikit';
+import { PortalProvider, ThemeProvider, ToasterProvider } from '@gravity-ui/uikit';
 import { toaster } from '@gravity-ui/uikit/toaster-singleton';
-import { configure, useMarkdownEditor, MarkdownEditorView } from '@gravity-ui/markdown-editor';
+import {
+  configure,
+  useMarkdownEditor,
+  MarkdownEditorView,
+  wysiwygToolbarConfigs,
+} from '@gravity-ui/markdown-editor';
+import { Math as MathExtension } from '@gravity-ui/markdown-editor/extensions/additional/Math/index.js';
+import { Mermaid } from '@gravity-ui/markdown-editor/extensions/additional/Mermaid/index.js';
+import { YfmHtmlBlock } from '@gravity-ui/markdown-editor/extensions/additional/YfmHtmlBlock/index.js';
 
 // Required styles
 import '@gravity-ui/uikit/styles/fonts.css';
@@ -41,6 +49,9 @@ import '@gravity-ui/markdown-editor/styles/styles.css';
  * @param {object}   props.mdOptions           - markdown-it options
  * @param {function} props.fileUploadHandler   - function(File) → Promise<{url, name?, type?}>
  * @param {object}   props.extensionOptions    - Options passed to wysiwygConfig.extensionOptions
+ * @param {boolean}  props.mathEnabled         - Register the LaTeX Math extension (default: true)
+ * @param {boolean}  props.mermaidEnabled      - Register the Mermaid diagram extension (default: true)
+ * @param {boolean}  props.htmlBlockEnabled    - Register the HTML Block extension (default: true)
  * @param {function} props.onChange            - Called with (value) on content change
  * @param {function} props.onSubmit            - Called with (value) on submit shortcut
  * @param {function} props.onCancel            - Called when cancel shortcut is pressed
@@ -59,10 +70,101 @@ function MarkdownEditorComponent(props) {
     onCancelRef.current = props.onCancel;
   });
 
+  // ------------------------------------------------------------------
+  // Portal container — appended to document.body with z-index:1070 so
+  // all gravity-ui floating popups (tooltips, dropdowns, color pickers)
+  // render above Bootstrap 3 modals (z-index:1050) and their backdrops.
+  // ------------------------------------------------------------------
+  var [portalContainer, setPortalContainer] = React.useState(null);
+
+  React.useEffect(function () {
+    var container = document.createElement('div');
+    container.className = 'g-root g-root_theme_' + (props.theme || 'light');
+    container.style.cssText = 'position:absolute;top:0;left:0;z-index:1070;';
+    container.setAttribute('data-md-editor-portals', '');
+    document.body.appendChild(container);
+    setPortalContainer(container);
+
+    return function () {
+      if (container.parentNode) {
+        container.parentNode.removeChild(container);
+      }
+    };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps — only on mount/unmount
+
+  // Keep portal container theme class in sync with props.theme at runtime.
+  React.useEffect(
+    function () {
+      if (portalContainer) {
+        portalContainer.className = 'g-root g-root_theme_' + (props.theme || 'light');
+      }
+    },
+    [props.theme, portalContainer],
+  );
+
   // Build editor options only once on mount (initial* props are intentionally
   // one-time — the editor manages its own state after creation).
   // eslint-disable-next-line react-hooks/exhaustive-deps
   var editorOptions = React.useMemo(function () {
+    // ----------------------------------------------------------------
+    // Extra extensions: Math (LaTeX), Mermaid, YfmHtmlBlock.
+    // These are not included in preset 'full' and must be registered
+    // explicitly. Runtime scripts are loaded via webpack lazy chunks.
+    // ----------------------------------------------------------------
+    var hasExtras = props.mathEnabled !== false || props.mermaidEnabled !== false || props.htmlBlockEnabled !== false;
+    var extensions = hasExtras
+      ? function (builder) {
+          if (props.mathEnabled !== false) {
+            builder.use(MathExtension, {
+              loadRuntimeScript: function () {
+                import(/* webpackChunkName: "latex-runtime" */ '@diplodoc/latex-extension/runtime');
+                import(/* webpackChunkName: "latex-styles" */ '@diplodoc/latex-extension/runtime/styles');
+              },
+            });
+          }
+          if (props.mermaidEnabled !== false) {
+            builder.use(Mermaid, {
+              loadRuntimeScript: function () {
+                import(/* webpackChunkName: "mermaid-runtime" */ '@diplodoc/mermaid-extension/runtime');
+              },
+              autoSave: { enabled: true, delay: 1000 },
+              theme: { dark: 'dark', light: 'default' },
+            });
+          }
+          if (props.htmlBlockEnabled !== false) {
+            builder.use(YfmHtmlBlock, {
+              autoSave: { enabled: true, delay: 1000 },
+            });
+          }
+        }
+      : undefined;
+
+    // ----------------------------------------------------------------
+    // Command-menu actions: extend the built-in full-preset menu with
+    // items for the extra extensions that are enabled. The user can
+    // override this via extensionOptions.commandMenu.actions.
+    // ----------------------------------------------------------------
+    var commandMenuActions = wysiwygToolbarConfigs.wCommandMenuConfig.slice();
+    if (props.mathEnabled !== false) {
+      commandMenuActions = commandMenuActions.concat([
+        wysiwygToolbarConfigs.wMathInlineItemData,
+        wysiwygToolbarConfigs.wMathBlockItemData,
+      ]);
+    }
+    if (props.mermaidEnabled !== false) {
+      commandMenuActions = commandMenuActions.concat([wysiwygToolbarConfigs.wMermaidItemData]);
+    }
+    if (props.htmlBlockEnabled !== false) {
+      commandMenuActions = commandMenuActions.concat([wysiwygToolbarConfigs.wYfmHtmlBlockItemData]);
+    }
+
+    // Merge user-supplied extensionOptions; user's commandMenu.actions
+    // takes precedence over our default if explicitly provided.
+    var userExtOpts = props.extensionOptions || {};
+    var mergedExtOpts = Object.assign({}, userExtOpts, {
+      commandMenu: Object.assign({ actions: commandMenuActions }, userExtOpts.commandMenu),
+    });
+
     return {
       preset: props.preset || 'full',
       initial: {
@@ -74,10 +176,10 @@ function MarkdownEditorComponent(props) {
       handlers: props.fileUploadHandler
         ? { uploadFile: props.fileUploadHandler }
         : undefined,
-      wysiwygConfig:
-        props.extensionOptions && Object.keys(props.extensionOptions).length > 0
-          ? { extensionOptions: props.extensionOptions }
-          : undefined,
+      wysiwygConfig: {
+        extensions: extensions,
+        extensionOptions: mergedExtOpts,
+      },
     };
   }, []); // empty deps — intentional one-time initialisation
 
@@ -132,13 +234,20 @@ function MarkdownEditorComponent(props) {
     ThemeProvider,
     { theme: props.theme || 'light' },
     React.createElement(
-      ToasterProvider,
-      { toaster: toaster },
-      React.createElement(MarkdownEditorView, {
-        editor: editor,
-        autofocus: props.autofocus || false,
-        stickyToolbar: props.stickyToolbar !== false,
-      }),
+      // PortalProvider redirects all floating-ui portals (tooltips,
+      // dropdowns, pickers) into our dedicated body container that
+      // carries z-index:1070, keeping them above BS3 modals (1050).
+      PortalProvider,
+      { container: portalContainer || undefined },
+      React.createElement(
+        ToasterProvider,
+        { toaster: toaster },
+        React.createElement(MarkdownEditorView, {
+          editor: editor,
+          autofocus: props.autofocus || false,
+          stickyToolbar: props.stickyToolbar !== false,
+        }),
+      ),
     ),
   );
 }
@@ -177,6 +286,9 @@ angular
       lang: 'en',               // 'en' | 'ru' — see upstream i18n for future language additions
       fileUploadHandler: null,  // function(File) → Promise<{url, name?, type?}>
       extensionOptions: {},     // options forwarded to wysiwygConfig.extensionOptions
+      mathEnabled: true,        // register LaTeX Math extension (requires @diplodoc/latex-extension)
+      mermaidEnabled: true,     // register Mermaid diagram extension (requires @diplodoc/mermaid-extension)
+      htmlBlockEnabled: true,   // register HTML Block extension (requires @diplodoc/html-extension)
     };
 
     /**
@@ -222,6 +334,9 @@ angular
    * lang                {string}    UI language: 'en'|'ru'                       (default: 'en')
    * fileUploadHandler   {function}  function(File) → Promise<{url, name?, type?}>
    * extensionOptions    {object}    Options forwarded to wysiwygConfig.extensionOptions
+   * mathEnabled         {boolean}   Register LaTeX Math extension.               (default: true)
+   * mermaidEnabled      {boolean}   Register Mermaid diagram extension.          (default: true)
+   * htmlBlockEnabled    {boolean}   Register HTML Block extension.               (default: true)
    *
    * Example
    * -------
@@ -330,6 +445,9 @@ angular
                 mdOptions: opts.mdOptions,
                 fileUploadHandler: opts.fileUploadHandler || null,
                 extensionOptions: opts.extensionOptions || {},
+                mathEnabled: opts.mathEnabled !== false,
+                mermaidEnabled: opts.mermaidEnabled !== false,
+                htmlBlockEnabled: opts.htmlBlockEnabled !== false,
                 onChange: handleChange,
                 onSubmit: handleSubmit,
                 onCancel: handleCancel,

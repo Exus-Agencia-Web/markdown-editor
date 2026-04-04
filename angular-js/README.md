@@ -103,6 +103,9 @@ Pass an object to the `options` attribute (or set global defaults via the provid
 | `lang`               | `string`   | `'en'`       | UI language: `'en'` (English) or `'ru'` (Russian) |
 | `fileUploadHandler`  | `function` | `null`       | `function(File) → Promise<{url, name?, type?}>` — enables image/file upload |
 | `extensionOptions`   | `object`   | `{}`         | Per-extension options forwarded to `wysiwygConfig.extensionOptions` |
+| `mathEnabled`        | `boolean`  | `true`       | Register the LaTeX Math extension (runtime loaded lazily via webpack chunk) |
+| `mermaidEnabled`     | `boolean`  | `true`       | Register the Mermaid diagram extension (runtime loaded lazily) |
+| `htmlBlockEnabled`   | `boolean`  | `true`       | Register the HTML Block extension (renders HTML in iframes) |
 
 ---
 
@@ -209,6 +212,54 @@ $scope.editorOptions = {
     image: { enableInlineStyling: true }
   }
 };
+```
+
+---
+
+## Additional Extensions (LaTeX, Mermaid, HTML Block)
+
+With `preset: 'full'`, three powerful extensions are automatically registered:
+
+| Extension      | Controlled by    | Description |
+|----------------|------------------|-------------|
+| **LaTeX Math** | `mathEnabled`    | Inline (`$...$`) and block (`$$...$$`) math via KaTeX. Runtime loaded lazily. |
+| **Mermaid**    | `mermaidEnabled` | Mermaid diagram blocks. Runtime loaded lazily. |
+| **HTML Block** | `htmlBlockEnabled` | Renders raw HTML in sandboxed iframes. |
+
+These extensions are **enabled by default** when `preset: 'full'`. To disable one:
+
+```javascript
+$scope.editorOptions = {
+  preset: 'full',
+  mathEnabled: false,      // no LaTeX
+  mermaidEnabled: false,   // no Mermaid
+};
+```
+
+Math and Mermaid runtimes are **webpack lazy chunks** — they are only downloaded when the
+user first interacts with a formula or diagram, keeping the initial bundle lean. The chunk
+files (`latex-runtime.chunk.min.js`, `mermaid-runtime.chunk.min.js`) must be served from
+the same path as the main bundle.
+
+> **Note:** The HTML Block extension renders content in iframes. Do not enable
+> `htmlBlockEnabled` (or `mdOptions.html: true`) when content comes from untrusted users —
+> apply server-side sanitization first.
+
+---
+
+## Popups Above Bootstrap 3 Modals
+
+When the editor is embedded inside a Bootstrap 3 modal (z-index `1050`), toolbar popups
+(tooltips, heading/list dropdowns, color pickers) are automatically raised above the modal.
+
+The wrapper creates a dedicated `<div data-md-editor-portals>` in `document.body` with
+`z-index: 1070` and routes all gravity-ui portals into it via `PortalProvider`. No extra
+configuration is needed — this works out of the box.
+
+If your modals use a custom z-index higher than `1050`, add a CSS override:
+
+```css
+[data-md-editor-portals] { z-index: 1200 !important; }
 ```
 
 ---
