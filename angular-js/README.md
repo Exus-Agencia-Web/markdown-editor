@@ -494,6 +494,64 @@ AngularJS template
 
 ---
 
+## Rendering Markdown without the Editor
+
+The bundle exports a `renderMarkdown()` function that uses the same
+markdown-it + YFM plugin pipeline as the editor. Use it to display Markdown
+content in read-only contexts (lists, detail views, comments) without
+mounting an editor component.
+
+All Yandex Flavored Markdown extensions are supported:
+- `{% note info %}…{% endnote %}` → `.yfm-note` block
+- `{% list tabs %}` / `{% endlist %}` → `.yfm-tabs` block
+- `{% cut "Title" %}…{% endcut %}` → `.yfm-cut` collapsible
+- Extended table syntax (`|| … ||`)
+
+The required CSS for all YFM elements is already included in the bundle
+stylesheet `angular-markdown-editor.min.css`.
+
+### Global function
+
+Available immediately after the bundle script is loaded — no AngularJS
+required:
+
+```js
+var html = window.markdownEditorRender('# Hello\n\nWorld');
+document.getElementById('output').innerHTML = html;
+
+// With custom options
+var html2 = window.markdownEditorRender(text, { html: false, breaks: false });
+```
+
+### AngularJS service
+
+Inject `markdownRenderer` anywhere in your AngularJS application:
+
+```js
+angular.module('myApp', ['markdownEditor'])
+  .controller('MyCtrl', function ($scope, markdownRenderer) {
+    // Basic render
+    $scope.html = markdownRenderer.render('# Hello\n\n{% note info %}Tip{% endnote %}');
+
+    // Smart render: auto-detects HTML vs Markdown.
+    // If the content already contains block-level HTML tags it is returned
+    // as-is (useful when migrating from a legacy HTML editor).
+    $scope.html = markdownRenderer.renderSmart(contentFromDatabase);
+  });
+```
+
+### AngularJS filter
+
+Use the `markdownToHtml` filter directly in HTML templates.
+Combine with `ng-bind-html` to render the result:
+
+```html
+<!-- Requires ngSanitize or $sce.trustAsHtml for ng-bind-html -->
+<div ng-bind-html="vm.content | markdownToHtml"></div>
+```
+
+---
+
 ## Browser Compatibility
 
 The bundle targets all modern browsers and IE11+ (via Babel `@babel/preset-env`).
