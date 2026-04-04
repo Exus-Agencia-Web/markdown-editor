@@ -113,7 +113,7 @@ angular.module('miApp', ['markdownEditor']);
           initialMode:    'wysiwyg',
           toolbarVisible: true,
           stickyToolbar:  true,
-          lang:           'en'
+          lang:           'es'
         });
       })
 
@@ -180,7 +180,7 @@ angular.module('miApp', ['markdownEditor']);
 | `stickyToolbar`      | `boolean`  | `true`            | Barra de herramientas fija al hacer scroll |
 | `theme`              | `string`   | `'light'`         | Tema de color: `'light'` · `'dark'` · `'light-hc'` · `'dark-hc'` |
 | `mdOptions`          | `object`   | `{}`              | Opciones para markdown-it: `{ html, breaks, linkify }` |
-| `lang`               | `string`   | `'en'`            | Idioma de la interfaz: `'en'` (inglés) o `'ru'` (ruso) |
+| `lang`               | `string`   | `'es'`            | Idioma de la interfaz: `'en'` (inglés), `'ru'` (ruso) o `'es'` (español) |
 | `fileUploadHandler`  | `function` | `null`            | `function(File) → Promise<{url, name?, type?}>` — habilita subida de imágenes/archivos |
 | `extensionOptions`   | `object`   | `{}`              | Opciones por extensión, pasadas a `wysiwygConfig.extensionOptions` |
 | `mathEnabled`        | `boolean`  | `true`            | Registrar extensión de matemáticas LaTeX (chunk lazy) |
