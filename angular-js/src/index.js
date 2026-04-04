@@ -118,15 +118,17 @@ function MarkdownEditorComponent(props) {
           if (props.mathEnabled !== false) {
             builder.use(MathExtension, {
               loadRuntimeScript: function () {
-                import(/* webpackChunkName: "latex-runtime" */ '@diplodoc/latex-extension/runtime');
-                import(/* webpackChunkName: "latex-styles" */ '@diplodoc/latex-extension/runtime/styles');
+                // Runtime is a webpack lazy chunk; errors are non-fatal —
+                // math nodes show as editable text until the chunk loads.
+                import(/* webpackChunkName: "latex-runtime" */ '@diplodoc/latex-extension/runtime').catch(function(){});
+                import(/* webpackChunkName: "latex-styles" */ '@diplodoc/latex-extension/runtime/styles').catch(function(){});
               },
             });
           }
           if (props.mermaidEnabled !== false) {
             builder.use(Mermaid, {
               loadRuntimeScript: function () {
-                import(/* webpackChunkName: "mermaid-runtime" */ '@diplodoc/mermaid-extension/runtime');
+                import(/* webpackChunkName: "mermaid-runtime" */ '@diplodoc/mermaid-extension/runtime').catch(function(){});
               },
               autoSave: { enabled: true, delay: 1000 },
               theme: { dark: 'dark', light: 'default' },
@@ -284,7 +286,7 @@ angular
       stickyToolbar: true,
       theme: 'light',
       mdOptions: {},
-      lang: 'en',               // 'en' | 'ru' — see upstream i18n for future language additions
+      lang: 'en',               // 'en' | 'ru' — see packages/editor/src/configure.ts for supported languages
       fileUploadHandler: null,  // function(File) → Promise<{url, name?, type?}>
       extensionOptions: {},     // options forwarded to wysiwygConfig.extensionOptions
       mathEnabled: true,        // register LaTeX Math extension (requires @diplodoc/latex-extension)
