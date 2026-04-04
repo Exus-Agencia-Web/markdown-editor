@@ -92,14 +92,24 @@ That's it. The editor is now embedded in your AngularJS application.
 
 Pass an object to the `options` attribute (or set global defaults via the provider):
 
-| Key             | Type      | Default      | Description |
-|-----------------|-----------|--------------|-------------|
-| `preset`        | `string`  | `'default'`  | Feature set: `'zero'` · `'commonmark'` · `'default'` · `'yfm'` · `'full'` |
-| `initialMode`   | `string`  | `'wysiwyg'`  | Starting mode: `'wysiwyg'` or `'markup'` |
-| `toolbarVisible`| `boolean` | `true`       | Show the toolbar on load |
-| `stickyToolbar` | `boolean` | `true`       | Keep the toolbar visible while scrolling |
-| `theme`         | `string`  | `'light'`    | Color theme: `'light'` · `'dark'` · `'light-hc'` · `'dark-hc'` |
-| `mdOptions`     | `object`  | `{}`         | Options forwarded to markdown-it: `{ html, breaks, linkify }` |
+> **Migration note:** The default `preset` was changed from `'default'` to `'full'` to give
+> new integrations the maximum feature set out of the box. If you need the old minimal
+> feature set, set `preset: 'default'` explicitly.
+
+| Key                  | Type       | Default      | Description |
+|----------------------|------------|--------------|-------------|
+| `preset`             | `string`   | `'full'`     | Feature set: `'zero'` · `'commonmark'` · `'default'` · `'yfm'` · `'full'` |
+| `initialMode`        | `string`   | `'wysiwyg'`  | Starting mode: `'wysiwyg'` or `'markup'` |
+| `toolbarVisible`     | `boolean`  | `true`       | Show the toolbar on load |
+| `stickyToolbar`      | `boolean`  | `true`       | Keep the toolbar visible while scrolling |
+| `theme`              | `string`   | `'light'`    | Color theme: `'light'` · `'dark'` · `'light-hc'` · `'dark-hc'` |
+| `mdOptions`          | `object`   | `{}`         | Options forwarded to markdown-it: `{ html, breaks, linkify }` |
+| `lang`               | `string`   | `'en'`       | UI language: `'en'` (English) or `'ru'` (Russian) |
+| `fileUploadHandler`  | `function` | `null`       | `function(File) → Promise<{url, name?, type?}>` — enables image/file upload |
+| `extensionOptions`   | `object`   | `{}`         | Per-extension options forwarded to `wysiwygConfig.extensionOptions` |
+| `mathEnabled`        | `boolean`  | `true`       | Register the LaTeX Math extension (runtime loaded lazily via webpack chunk) |
+| `mermaidEnabled`     | `boolean`  | `true`       | Register the Mermaid diagram extension (runtime loaded lazily) |
+| `htmlBlockEnabled`   | `boolean`  | `true`       | Register the HTML Block extension (renders HTML in iframes) |
 
 ---
 
@@ -117,13 +127,143 @@ angular.module('myApp', ['markdownEditor'])
       initialMode:   'markup',
       toolbarVisible: true,
       stickyToolbar:  true,
+      lang:           'en',
       mdOptions: {
         html:    false,
         breaks:  true,
         linkify: true
-      }
+      },
+      fileUploadHandler: null, // override per instance
+      extensionOptions:  {}
     });
   });
+```
+
+---
+
+## File Upload
+
+Enable image and file uploads by providing a `fileUploadHandler` function. The handler receives a
+`File` object and must return a `Promise` that resolves to `{ url, name?, type? }`.
+
+```javascript
+$scope.editorOptions = {
+  preset: 'full',
+  fileUploadHandler: function (file) {
+    // Upload the file and return its public URL
+    var formData = new FormData();
+    formData.append('file', file);
+    return $http.post('/api/upload', formData, {
+      headers: { 'Content-Type': undefined }
+    }).then(function (resp) {
+      return { url: resp.data.url, name: file.name, type: file.type };
+    });
+  }
+};
+```
+
+```html
+<markdown-editor ng-model="content" options="editorOptions"></markdown-editor>
+```
+
+---
+
+## i18n / Locale
+
+Set the UI language via the `lang` option. Currently `'en'` (English, default) and `'ru'`
+(Russian) are supported. The option is also accepted at the provider level:
+
+```javascript
+markdownEditorConfigProvider.setDefaults({ lang: 'ru' });
+```
+
+Changing `lang` at runtime (via the `options` binding) takes effect on the next re-render.
+Because the directive watches `options` with deep equality, assigning a new object to `options`
+is enough to trigger the update:
+
+```javascript
+$scope.editorOptions = angular.extend({}, $scope.editorOptions, { lang: 'ru' });
+```
+
+> **Note:** `lang` controls the editor's own UI labels (toolbar tooltips, placeholders, etc.).
+> It does not affect the markdown content itself.
+
+---
+
+## Runtime Theme Switching
+
+Changing `options.theme` at runtime (e.g. toggling dark mode) automatically re-renders the
+`ThemeProvider` with the new theme — no page reload required:
+
+```javascript
+$scope.toggleTheme = function () {
+  $scope.editorOptions = angular.extend({}, $scope.editorOptions, {
+    theme: $scope.editorOptions.theme === 'dark' ? 'light' : 'dark'
+  });
+};
+```
+
+---
+
+## Extension Options
+
+Pass per-extension configuration via `extensionOptions` to fine-tune built-in extensions:
+
+```javascript
+$scope.editorOptions = {
+  preset: 'full',
+  extensionOptions: {
+    image: { enableInlineStyling: true }
+  }
+};
+```
+
+---
+
+## Additional Extensions (LaTeX, Mermaid, HTML Block)
+
+With `preset: 'full'`, three powerful extensions are automatically registered:
+
+| Extension      | Controlled by    | Description |
+|----------------|------------------|-------------|
+| **LaTeX Math** | `mathEnabled`    | Inline (`$...$`) and block (`$$...$$`) math via KaTeX. Runtime loaded lazily. |
+| **Mermaid**    | `mermaidEnabled` | Mermaid diagram blocks. Runtime loaded lazily. |
+| **HTML Block** | `htmlBlockEnabled` | Renders raw HTML in sandboxed iframes. |
+
+These extensions are **enabled by default** when `preset: 'full'`. To disable one:
+
+```javascript
+$scope.editorOptions = {
+  preset: 'full',
+  mathEnabled: false,      // no LaTeX
+  mermaidEnabled: false,   // no Mermaid
+};
+```
+
+Math and Mermaid runtimes are **webpack lazy chunks** — they are only downloaded when the
+user first interacts with a formula or diagram, keeping the initial bundle lean. The chunk
+files (`latex-runtime.chunk.min.js`, `mermaid-runtime.chunk.min.js`) must be served from
+the same path as the main bundle.
+
+> **Note:** The HTML Block extension renders content in iframes. Do not enable
+> `htmlBlockEnabled` (or `mdOptions.html: true`) when content comes from untrusted users —
+> apply server-side sanitization first.
+
+---
+
+## Popups Above Bootstrap 3 Modals
+
+When the editor is embedded inside a Bootstrap 3 modal (z-index `1050`), toolbar popups
+(tooltips, heading/list dropdowns, color pickers) are automatically raised above the modal.
+
+The wrapper creates a dedicated `<div data-md-editor-portals>` in `document.body` with
+`z-index: 1070` and routes all gravity-ui portals into it via `PortalProvider`. No extra
+configuration is needed — this works out of the box.
+
+If your modals use a custom z-index higher than `1050`, add a CSS override:
+
+```css
+[data-md-editor-portals] { z-index: 1200 !important; }
 ```
 
 ---

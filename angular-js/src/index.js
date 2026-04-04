@@ -11,9 +11,17 @@
 
 import React from 'react';
 import { createRoot } from 'react-dom/client';
-import { ThemeProvider, ToasterProvider } from '@gravity-ui/uikit';
+import { PortalProvider, ThemeProvider, ToasterProvider } from '@gravity-ui/uikit';
 import { toaster } from '@gravity-ui/uikit/toaster-singleton';
-import { useMarkdownEditor, MarkdownEditorView } from '@gravity-ui/markdown-editor';
+import {
+  configure,
+  useMarkdownEditor,
+  MarkdownEditorView,
+  wysiwygToolbarConfigs,
+} from '@gravity-ui/markdown-editor';
+import { Math as MathExtension } from '@gravity-ui/markdown-editor/extensions/additional/Math/index.js';
+import { Mermaid } from '@gravity-ui/markdown-editor/extensions/additional/Mermaid/index.js';
+import { YfmHtmlBlock } from '@gravity-ui/markdown-editor/extensions/additional/YfmHtmlBlock/index.js';
 
 // Required styles
 import '@gravity-ui/uikit/styles/fonts.css';
@@ -30,19 +38,24 @@ import '@gravity-ui/markdown-editor/styles/styles.css';
  * Internal React component rendered inside the AngularJS directive element.
  * Bridges React hooks and the AngularJS world.
  *
- * @param {object} props
- * @param {string}   props.initialValue   - Initial markdown content
- * @param {string}   props.preset         - Editor preset
- * @param {string}   props.initialMode    - 'wysiwyg' | 'markup'
- * @param {boolean}  props.toolbarVisible - Whether to show the toolbar
- * @param {boolean}  props.stickyToolbar  - Whether toolbar is sticky
- * @param {string}   props.theme          - 'light' | 'dark' | 'light-hc' | 'dark-hc'
- * @param {boolean}  props.autofocus      - Autofocus on mount
- * @param {object}   props.mdOptions      - markdown-it options
- * @param {function} props.onChange       - Called with (value) on content change
- * @param {function} props.onSubmit       - Called with (value) on submit shortcut
- * @param {function} props.onCancel       - Called when cancel shortcut is pressed
- * @param {function} props.onEditorReady  - Called with (editorInstance) when ready
+ * @param {object}   props
+ * @param {string}   props.initialValue        - Initial markdown content
+ * @param {string}   props.preset              - Editor preset ('zero'|'commonmark'|'default'|'yfm'|'full')
+ * @param {string}   props.initialMode         - 'wysiwyg' | 'markup'
+ * @param {boolean}  props.toolbarVisible      - Whether to show the toolbar
+ * @param {boolean}  props.stickyToolbar       - Whether toolbar is sticky
+ * @param {string}   props.theme               - 'light' | 'dark' | 'light-hc' | 'dark-hc'
+ * @param {boolean}  props.autofocus           - Autofocus on mount
+ * @param {object}   props.mdOptions           - markdown-it options
+ * @param {function} props.fileUploadHandler   - function(File) → Promise<{url, name?, type?}>
+ * @param {object}   props.extensionOptions    - Options passed to wysiwygConfig.extensionOptions
+ * @param {boolean}  props.mathEnabled         - Register the LaTeX Math extension (default: true)
+ * @param {boolean}  props.mermaidEnabled      - Register the Mermaid diagram extension (default: true)
+ * @param {boolean}  props.htmlBlockEnabled    - Register the HTML Block extension (default: true)
+ * @param {function} props.onChange            - Called with (value) on content change
+ * @param {function} props.onSubmit            - Called with (value) on submit shortcut
+ * @param {function} props.onCancel            - Called when cancel shortcut is pressed
+ * @param {function} props.onEditorReady       - Called with (editorInstance) when ready
  */
 function MarkdownEditorComponent(props) {
   // Store callbacks in refs so event listeners don't need to re-subscribe
@@ -57,18 +70,119 @@ function MarkdownEditorComponent(props) {
     onCancelRef.current = props.onCancel;
   });
 
+  // ------------------------------------------------------------------
+  // Portal container — appended to document.body with z-index:1070 so
+  // all gravity-ui floating popups (tooltips, dropdowns, color pickers)
+  // render above Bootstrap 3 modals (z-index:1050) and their backdrops.
+  // ------------------------------------------------------------------
+  var [portalContainer, setPortalContainer] = React.useState(null);
+
+  React.useEffect(function () {
+    var container = document.createElement('div');
+    // Theme class is intentionally set to 'light' here; the theme-sync
+    // effect below will immediately correct it to the actual initial theme.
+    container.className = 'g-root g-root_theme_light';
+    container.style.cssText = 'position:absolute;top:0;left:0;z-index:1070;';
+    container.setAttribute('data-md-editor-portals', '');
+    document.body.appendChild(container);
+    setPortalContainer(container);
+
+    return function () {
+      if (container.parentNode) {
+        container.parentNode.removeChild(container);
+      }
+    };
+  }, []); // mount/unmount only — theme updates are handled by the effect below
+
+  // Keep portal container theme class in sync with props.theme at runtime.
+  React.useEffect(
+    function () {
+      if (portalContainer) {
+        portalContainer.className = 'g-root g-root_theme_' + (props.theme || 'light');
+      }
+    },
+    [props.theme, portalContainer],
+  );
+
   // Build editor options only once on mount (initial* props are intentionally
   // one-time — the editor manages its own state after creation).
   // eslint-disable-next-line react-hooks/exhaustive-deps
   var editorOptions = React.useMemo(function () {
+    // ----------------------------------------------------------------
+    // Extra extensions: Math (LaTeX), Mermaid, YfmHtmlBlock.
+    // These are not included in preset 'full' and must be registered
+    // explicitly. Runtime scripts are loaded via webpack lazy chunks.
+    // ----------------------------------------------------------------
+    var extensions = (props.mathEnabled !== false || props.mermaidEnabled !== false || props.htmlBlockEnabled !== false)
+      ? function (builder) {
+          if (props.mathEnabled !== false) {
+            builder.use(MathExtension, {
+              loadRuntimeScript: function () {
+                // Runtime is a webpack lazy chunk; errors are non-fatal —
+                // math nodes show as editable text until the chunk loads.
+                import(/* webpackChunkName: "latex-runtime" */ '@diplodoc/latex-extension/runtime').catch(function(){});
+                import(/* webpackChunkName: "latex-styles" */ '@diplodoc/latex-extension/runtime/styles').catch(function(){});
+              },
+            });
+          }
+          if (props.mermaidEnabled !== false) {
+            builder.use(Mermaid, {
+              loadRuntimeScript: function () {
+                import(/* webpackChunkName: "mermaid-runtime" */ '@diplodoc/mermaid-extension/runtime').catch(function(){});
+              },
+              autoSave: { enabled: true, delay: 1000 },
+              theme: { dark: 'dark', light: 'default' },
+            });
+          }
+          if (props.htmlBlockEnabled !== false) {
+            builder.use(YfmHtmlBlock, {
+              autoSave: { enabled: true, delay: 1000 },
+            });
+          }
+        }
+      : undefined;
+
+    // ----------------------------------------------------------------
+    // Command-menu actions: extend the built-in full-preset menu with
+    // items for the extra extensions that are enabled. The user can
+    // override this via extensionOptions.commandMenu.actions.
+    // ----------------------------------------------------------------
+    var commandMenuActions = (wysiwygToolbarConfigs.wCommandMenuConfig || []).slice();
+    if (props.mathEnabled !== false) {
+      commandMenuActions = commandMenuActions.concat([
+        wysiwygToolbarConfigs.wMathInlineItemData,
+        wysiwygToolbarConfigs.wMathBlockItemData,
+      ]);
+    }
+    if (props.mermaidEnabled !== false) {
+      commandMenuActions = commandMenuActions.concat([wysiwygToolbarConfigs.wMermaidItemData]);
+    }
+    if (props.htmlBlockEnabled !== false) {
+      commandMenuActions = commandMenuActions.concat([wysiwygToolbarConfigs.wYfmHtmlBlockItemData]);
+    }
+
+    // Merge user-supplied extensionOptions; user's commandMenu.actions
+    // takes precedence over our default if explicitly provided.
+    var userExtOpts = props.extensionOptions || {};
+    var mergedExtOpts = Object.assign({}, userExtOpts, {
+      commandMenu: Object.assign({ actions: commandMenuActions }, userExtOpts.commandMenu),
+    });
+
     return {
-      preset: props.preset || 'default',
+      preset: props.preset || 'full',
       initial: {
         markup: props.initialValue || '',
         mode: props.initialMode || 'wysiwyg',
         toolbarVisible: props.toolbarVisible !== false,
       },
       md: props.mdOptions || {},
+      handlers: props.fileUploadHandler
+        ? { uploadFile: props.fileUploadHandler }
+        : undefined,
+      wysiwygConfig: {
+        extensions: extensions,
+        extensionOptions: mergedExtOpts,
+      },
     };
   }, []); // empty deps — intentional one-time initialisation
 
@@ -123,13 +237,20 @@ function MarkdownEditorComponent(props) {
     ThemeProvider,
     { theme: props.theme || 'light' },
     React.createElement(
-      ToasterProvider,
-      { toaster: toaster },
-      React.createElement(MarkdownEditorView, {
-        editor: editor,
-        autofocus: props.autofocus || false,
-        stickyToolbar: props.stickyToolbar !== false,
-      }),
+      // PortalProvider redirects all floating-ui portals (tooltips,
+      // dropdowns, pickers) into our dedicated body container that
+      // carries z-index:1070, keeping them above BS3 modals (1050).
+      PortalProvider,
+      { container: portalContainer || undefined },
+      React.createElement(
+        ToasterProvider,
+        { toaster: toaster },
+        React.createElement(MarkdownEditorView, {
+          editor: editor,
+          autofocus: props.autofocus || false,
+          stickyToolbar: props.stickyToolbar !== false,
+        }),
+      ),
     ),
   );
 }
@@ -159,12 +280,18 @@ angular
    */
   .provider('markdownEditorConfig', function MarkdownEditorConfigProvider() {
     var defaults = {
-      preset: 'default',
+      preset: 'full',
       initialMode: 'wysiwyg',
       toolbarVisible: true,
       stickyToolbar: true,
       theme: 'light',
       mdOptions: {},
+      lang: 'en',               // 'en' | 'ru' — see packages/editor/src/configure.ts for supported languages
+      fileUploadHandler: null,  // function(File) → Promise<{url, name?, type?}>
+      extensionOptions: {},     // options forwarded to wysiwygConfig.extensionOptions
+      mathEnabled: true,        // register LaTeX Math extension (requires @diplodoc/latex-extension)
+      mermaidEnabled: true,     // register Mermaid diagram extension (requires @diplodoc/mermaid-extension)
+      htmlBlockEnabled: true,   // register HTML Block extension (requires @diplodoc/html-extension)
     };
 
     /**
@@ -201,12 +328,18 @@ angular
    *
    * Options object
    * --------------
-   * preset          {string}   'zero'|'commonmark'|'default'|'yfm'|'full'  (default: 'default')
-   * initialMode     {string}   'wysiwyg'|'markup'                           (default: 'wysiwyg')
-   * toolbarVisible  {boolean}  Show toolbar on load.                        (default: true)
-   * stickyToolbar   {boolean}  Sticky toolbar behaviour.                    (default: true)
-   * theme           {string}   'light'|'dark'|'light-hc'|'dark-hc'         (default: 'light')
-   * mdOptions       {object}   markdown-it options: { html, breaks, linkify }
+   * preset              {string}    'zero'|'commonmark'|'default'|'yfm'|'full'  (default: 'full')
+   * initialMode         {string}    'wysiwyg'|'markup'                           (default: 'wysiwyg')
+   * toolbarVisible      {boolean}   Show toolbar on load.                        (default: true)
+   * stickyToolbar       {boolean}   Sticky toolbar behaviour.                    (default: true)
+   * theme               {string}    'light'|'dark'|'light-hc'|'dark-hc'         (default: 'light')
+   * mdOptions           {object}    markdown-it options: { html, breaks, linkify }
+   * lang                {string}    UI language: 'en'|'ru'                       (default: 'en')
+   * fileUploadHandler   {function}  function(File) → Promise<{url, name?, type?}>
+   * extensionOptions    {object}    Options forwarded to wysiwygConfig.extensionOptions
+   * mathEnabled         {boolean}   Register LaTeX Math extension.               (default: true)
+   * mermaidEnabled      {boolean}   Register Mermaid diagram extension.          (default: true)
+   * htmlBlockEnabled    {boolean}   Register HTML Block extension.               (default: true)
    *
    * Example
    * -------
@@ -294,29 +427,51 @@ angular
           }
 
           // ------------------------------------------------------------------
+          // Render (or re-render) the React component with current opts.
+          // Re-calling render() updates props on the existing React tree via
+          // reconciliation — the editor instance and its state are preserved.
+          // Only ThemeProvider (theme) and MarkdownEditorView (stickyToolbar)
+          // respond to prop updates; editor options are one-time on mount.
+          // ------------------------------------------------------------------
+          var attrInitialValue = attrs.value || '';
+
+          function renderEditor() {
+            reactRoot.render(
+              React.createElement(MarkdownEditorComponent, {
+                initialValue: attrInitialValue,
+                preset: opts.preset,
+                initialMode: opts.initialMode,
+                toolbarVisible: opts.toolbarVisible,
+                stickyToolbar: opts.stickyToolbar,
+                theme: opts.theme,
+                autofocus: attrs.autofocus !== undefined,
+                mdOptions: opts.mdOptions,
+                fileUploadHandler: opts.fileUploadHandler || null,
+                extensionOptions: opts.extensionOptions || {},
+                mathEnabled: opts.mathEnabled !== false,
+                mermaidEnabled: opts.mermaidEnabled !== false,
+                htmlBlockEnabled: opts.htmlBlockEnabled !== false,
+                onChange: handleChange,
+                onSubmit: handleSubmit,
+                onCancel: handleCancel,
+                onEditorReady: handleEditorReady,
+              }),
+            );
+          }
+
+          // ------------------------------------------------------------------
           // Mount React component.
           // The editor always starts with an empty document (or attrs.value for
           // non-ng-model usage). The actual initial content for ng-model is
           // applied via ngModel.$render once AngularJS runs its first digest.
           // ------------------------------------------------------------------
-          var attrInitialValue = attrs.value || '';
           reactRoot = createRoot(container);
-          reactRoot.render(
-            React.createElement(MarkdownEditorComponent, {
-              initialValue: attrInitialValue,
-              preset: opts.preset,
-              initialMode: opts.initialMode,
-              toolbarVisible: opts.toolbarVisible,
-              stickyToolbar: opts.stickyToolbar,
-              theme: opts.theme,
-              autofocus: attrs.autofocus !== undefined,
-              mdOptions: opts.mdOptions,
-              onChange: handleChange,
-              onSubmit: handleSubmit,
-              onCancel: handleCancel,
-              onEditorReady: handleEditorReady,
-            }),
-          );
+
+          // Apply the locale before the first render so the editor UI uses the
+          // requested language from the very first mount.
+          configure({ lang: opts.lang || 'en' });
+
+          renderEditor();
 
           // ------------------------------------------------------------------
           // Sync external ng-model changes into the editor.
@@ -338,12 +493,16 @@ angular
             };
           }
 
-          // React to options changes (e.g. theme switch)
+          // React to options changes (e.g. theme switch at runtime).
+          // Re-rendering the React root propagates updated props to
+          // ThemeProvider and MarkdownEditorView via reconciliation.
           scope.$watch(
             'options',
             function (newOpts) {
               if (newOpts) {
                 opts = angular.extend({}, markdownEditorConfig, newOpts);
+                configure({ lang: opts.lang || 'en' });
+                renderEditor();
               }
             },
             true,
