@@ -292,6 +292,63 @@ $scope.opciones = {
 
 ---
 
+## Renderizar Markdown sin el Editor
+
+El bundle exporta una función `renderMarkdown()` que usa el mismo pipeline
+markdown-it + plugins YFM que el editor. Úsala para mostrar contenido Markdown
+en contextos de sólo lectura (listas, vistas de detalle, comentarios) sin
+montar un componente editor.
+
+Se admiten todas las extensiones de Yandex Flavored Markdown:
+- `{% note info %}…{% endnote %}` → bloque `.yfm-note`
+- `{% list tabs %}` / `{% endlist %}` → bloque `.yfm-tabs`
+- `{% cut "Título" %}…{% endcut %}` → bloque `.yfm-cut` colapsable
+- Sintaxis de tabla extendida (`|| … ||`)
+
+El CSS necesario para todos los elementos YFM ya está incluido en la hoja de
+estilos del bundle `angular-markdown-editor.min.css`.
+
+### Función global
+
+Disponible en cuanto se carga el script del bundle, sin necesidad de AngularJS:
+
+```js
+var html = window.markdownEditorRender('# Hola\n\nMundo');
+document.getElementById('salida').innerHTML = html;
+
+// Con opciones personalizadas
+var html2 = window.markdownEditorRender(texto, { html: false, breaks: false });
+```
+
+### Servicio AngularJS
+
+Inyecta `markdownRenderer` en cualquier parte de tu aplicación AngularJS:
+
+```js
+angular.module('miApp', ['markdownEditor'])
+  .controller('MiCtrl', function ($scope, markdownRenderer) {
+    // Renderizado básico
+    $scope.html = markdownRenderer.render('# Hola\n\n{% note info %}Consejo{% endnote %}');
+
+    // Renderizado inteligente: detecta automáticamente HTML vs Markdown.
+    // Si el contenido ya contiene etiquetas HTML de bloque se devuelve tal cual
+    // (útil al migrar desde un editor HTML legado).
+    $scope.html = markdownRenderer.renderSmart(contenidoDeLaBD);
+  });
+```
+
+### Filtro AngularJS
+
+Usa el filtro `markdownToHtml` directamente en las plantillas HTML.
+Combínalo con `ng-bind-html` para renderizar el resultado:
+
+```html
+<!-- Requiere ngSanitize o $sce.trustAsHtml para ng-bind-html -->
+<div ng-bind-html="vm.contenido | markdownToHtml"></div>
+```
+
+---
+
 ## Popups sobre modales Bootstrap 3
 
 Cuando el editor se encuentra dentro de un modal Bootstrap 3 (z-index `1050`), todos los

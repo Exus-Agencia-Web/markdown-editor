@@ -4,6 +4,11 @@
  * This module provides the `markdownEditor` AngularJS module containing:
  *   - `<markdown-editor>` directive with ng-model support
  *   - `markdownEditorConfigProvider` for global configuration
+ *   - `markdownRenderer` service for rendering Markdown to HTML
+ *   - `markdownToHtml` filter for use in templates
+ *
+ * A global `window.markdownEditorRender(text, options?)` function is also
+ * exposed for use outside of AngularJS.
  *
  * Usage:
  *   angular.module('myApp', ['markdownEditor']);
@@ -24,6 +29,11 @@ import { esTranslations } from './i18n/es';
 import { Math as MathExtension } from '@gravity-ui/markdown-editor/extensions/additional/Math/index.js';
 import { Mermaid } from '@gravity-ui/markdown-editor/extensions/additional/Mermaid/index.js';
 import { YfmHtmlBlock } from '@gravity-ui/markdown-editor/extensions/additional/YfmHtmlBlock/index.js';
+import MarkdownIt from 'markdown-it';
+import { transform as tabsPlugin } from '@diplodoc/tabs-extension';
+import { transform as cutPlugin } from '@diplodoc/cut-extension';
+import yfmNotesPlugin from '@diplodoc/transform/lib/plugins/notes/index.js';
+import yfmTablePlugin from '@diplodoc/transform/lib/plugins/table/index.js';
 
 // Required styles
 import '@gravity-ui/uikit/styles/fonts.css';
@@ -41,6 +51,87 @@ import '@gravity-ui/markdown-editor/styles/styles.css';
 Object.keys(esTranslations).forEach(function (keyset) {
   editorI18n.registerKeyset('es', keyset, esTranslations[keyset]);
 });
+
+// ---------------------------------------------------------------------------
+// renderMarkdown — static Markdown-to-HTML renderer
+//
+// Uses the same markdown-it + YFM plugin pipeline as the WYSIWYG editor so
+// that content rendered outside the editor looks identical to content inside
+// the editor (YFM notes, tabs, cuts, tables, code highlighting, etc.).
+//
+// Available as:
+//   • window.markdownEditorRender(text, options?)  — global function
+//   • AngularJS service  markdownRenderer.render() / .renderSmart()
+//   • AngularJS filter   {{ text | markdownToHtml }}
+// ---------------------------------------------------------------------------
+
+/**
+ * Minimal log shim passed to YFM plugins.
+ * Suppresses warnings in production; only forwards errors to the console.
+ * @private
+ */
+var _yfmLog = {
+  warn: function () {},
+  error: function (msg) { console.error('[markdown-editor]', msg); },
+};
+
+/**
+ * Create a markdown-it instance pre-configured with the same YFM plugins
+ * used by the editor (tabs, cut, notes, tables, …).
+ *
+ * @param {object} [opts] - markdown-it constructor options
+ * @returns {MarkdownIt}
+ * @private
+ */
+function _createMd(opts) {
+  var md = new MarkdownIt(Object.assign({ html: true, breaks: true, linkify: true }, opts));
+  // YFM tabs  ({% list tabs %} … {% endlist %})
+  md.use(tabsPlugin({ bundle: false, features: { enabledVariants: { regular: true, radio: true } } }));
+  // YFM cut / collapsible blocks
+  md.use(cutPlugin({ bundle: false }));
+  // YFM notes / alerts  ({% note info %} … {% endnote %})
+  md.use(yfmNotesPlugin, { log: _yfmLog, lang: 'en' });
+  // YFM tables  (extended || … || syntax)
+  md.use(yfmTablePlugin, { log: _yfmLog });
+  return md;
+}
+
+/** Singleton markdown-it instance with default options (lazy-initialized). */
+var _defaultMd = null;
+
+/**
+ * Render Markdown to HTML using the same YFM pipeline as the editor.
+ *
+ * Supports all Yandex Flavored Markdown extensions:
+ *   - `{% note info %}…{% endnote %}` → renders as `.yfm-note`
+ *   - `{% list tabs %}` / `{% endlist %}` → renders as `.yfm-tabs`
+ *   - `{% cut "Title" %}…{% endcut %}` → renders as `.yfm-cut`
+ *   - YFM tables (`|| … ||` syntax)
+ *
+ * @param {string} markdown - Markdown text (may include YFM extensions).
+ * @param {object} [options] - Optional markdown-it options.
+ * @param {boolean} [options.html=true]    Allow raw HTML in markdown.
+ * @param {boolean} [options.breaks=true]  Convert newlines to `<br>`.
+ * @param {boolean} [options.linkify=true] Auto-link bare URLs.
+ * @returns {string} Rendered HTML string.
+ */
+function renderMarkdown(markdown, options) {
+  if (!markdown) return '';
+  var str = String(markdown);
+  if (options) {
+    // Non-default options: create a fresh md instance to avoid cache poisoning.
+    return _createMd(options).render(str);
+  }
+  if (!_defaultMd) {
+    _defaultMd = _createMd();
+  }
+  return _defaultMd.render(str);
+}
+
+// Expose globally — usable without AngularJS as window.markdownEditorRender()
+if (typeof window !== 'undefined') {
+  window.markdownEditorRender = renderMarkdown;
+}
 
 // ---------------------------------------------------------------------------
 // React wrapper component
@@ -532,4 +623,72 @@ angular
         },
       };
     },
-  ]);
+  ])
+
+  // -------------------------------------------------------------------------
+  // markdownRenderer service
+  // -------------------------------------------------------------------------
+  /**
+   * AngularJS factory that exposes the renderMarkdown pipeline as an
+   * injectable service.
+   *
+   * Inject as `markdownRenderer` in controllers, directives, or other
+   * services:
+   *
+   *   app.controller('MyCtrl', function($scope, markdownRenderer) {
+   *     $scope.html = markdownRenderer.render($scope.markdownContent);
+   *     // or, when mixing legacy HTML and Markdown:
+   *     $scope.html = markdownRenderer.renderSmart($scope.content);
+   *   });
+   */
+  .factory('markdownRenderer', function () {
+    return {
+      /**
+       * Render Markdown to HTML using the YFM pipeline.
+       * @param {string} markdown  Markdown text (may include YFM extensions).
+       * @param {object} [options] Optional markdown-it options.
+       * @returns {string} HTML string.
+       */
+      render: renderMarkdown,
+
+      /**
+       * Render only when the content looks like Markdown.
+       * If the string already contains block-level HTML tags it is assumed to
+       * be legacy HTML content (e.g. from an older editor) and is returned
+       * unchanged.  This avoids double-encoding HTML that was stored before
+       * the switch to Markdown.
+       *
+       * @param {string} content   Markdown or HTML content.
+       * @param {object} [options] Optional markdown-it options.
+       * @returns {string} HTML string.
+       */
+      renderSmart: function (content, options) {
+        if (!content) return '';
+        var str = String(content);
+        // If the string already contains block-level HTML, treat it as legacy HTML.
+        if (/<(?:p|div|ul|ol|li|table|h[1-6]|blockquote|pre)[^>]*>/i.test(str)) {
+          return str;
+        }
+        return renderMarkdown(str, options);
+      },
+    };
+  })
+
+  // -------------------------------------------------------------------------
+  // markdownToHtml filter
+  // -------------------------------------------------------------------------
+  /**
+   * AngularJS filter for rendering Markdown in templates.
+   *
+   * Usage in HTML templates (combine with ng-bind-html):
+   *   <div ng-bind-html="vm.content | markdownToHtml"></div>
+   *
+   * The filter passes through the `$sce` trust layer so you must either use
+   * `ng-bind-html` (which auto-trusts safe HTML) or trust the result manually
+   * with `$sce.trustAsHtml()` when assigning to scope.
+   */
+  .filter('markdownToHtml', ['markdownRenderer', function (markdownRenderer) {
+    return function (input, options) {
+      return markdownRenderer.render(input, options);
+    };
+  }]);

@@ -8,9 +8,12 @@
     "build:dev": "webpack --mode=development --config webpack.config.js"
   },
   "dependencies": {
+    "@diplodoc/cut-extension": "^1.1.0",
     "@diplodoc/html-extension": "^2.9.1",
     "@diplodoc/latex-extension": "^1.4.1",
     "@diplodoc/mermaid-extension": "^2.0.0",
+    "@diplodoc/tabs-extension": "^3.7.5",
+    "@diplodoc/transform": "^4.69.0",
     "@gravity-ui/components": "4.10.0",
     "@gravity-ui/markdown-editor": "15.37.0",
     "@gravity-ui/uikit": "7.13.1",
