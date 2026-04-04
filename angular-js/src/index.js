@@ -13,7 +13,7 @@ import React from 'react';
 import { createRoot } from 'react-dom/client';
 import { ThemeProvider, ToasterProvider } from '@gravity-ui/uikit';
 import { toaster } from '@gravity-ui/uikit/toaster-singleton';
-import { useMarkdownEditor, MarkdownEditorView } from '@gravity-ui/markdown-editor';
+import { configure, useMarkdownEditor, MarkdownEditorView } from '@gravity-ui/markdown-editor';
 
 // Required styles
 import '@gravity-ui/uikit/styles/fonts.css';
@@ -30,19 +30,21 @@ import '@gravity-ui/markdown-editor/styles/styles.css';
  * Internal React component rendered inside the AngularJS directive element.
  * Bridges React hooks and the AngularJS world.
  *
- * @param {object} props
- * @param {string}   props.initialValue   - Initial markdown content
- * @param {string}   props.preset         - Editor preset
- * @param {string}   props.initialMode    - 'wysiwyg' | 'markup'
- * @param {boolean}  props.toolbarVisible - Whether to show the toolbar
- * @param {boolean}  props.stickyToolbar  - Whether toolbar is sticky
- * @param {string}   props.theme          - 'light' | 'dark' | 'light-hc' | 'dark-hc'
- * @param {boolean}  props.autofocus      - Autofocus on mount
- * @param {object}   props.mdOptions      - markdown-it options
- * @param {function} props.onChange       - Called with (value) on content change
- * @param {function} props.onSubmit       - Called with (value) on submit shortcut
- * @param {function} props.onCancel       - Called when cancel shortcut is pressed
- * @param {function} props.onEditorReady  - Called with (editorInstance) when ready
+ * @param {object}   props
+ * @param {string}   props.initialValue        - Initial markdown content
+ * @param {string}   props.preset              - Editor preset ('zero'|'commonmark'|'default'|'yfm'|'full')
+ * @param {string}   props.initialMode         - 'wysiwyg' | 'markup'
+ * @param {boolean}  props.toolbarVisible      - Whether to show the toolbar
+ * @param {boolean}  props.stickyToolbar       - Whether toolbar is sticky
+ * @param {string}   props.theme               - 'light' | 'dark' | 'light-hc' | 'dark-hc'
+ * @param {boolean}  props.autofocus           - Autofocus on mount
+ * @param {object}   props.mdOptions           - markdown-it options
+ * @param {function} props.fileUploadHandler   - function(File) → Promise<{url, name?, type?}>
+ * @param {object}   props.extensionOptions    - Options passed to wysiwygConfig.extensionOptions
+ * @param {function} props.onChange            - Called with (value) on content change
+ * @param {function} props.onSubmit            - Called with (value) on submit shortcut
+ * @param {function} props.onCancel            - Called when cancel shortcut is pressed
+ * @param {function} props.onEditorReady       - Called with (editorInstance) when ready
  */
 function MarkdownEditorComponent(props) {
   // Store callbacks in refs so event listeners don't need to re-subscribe
@@ -62,13 +64,20 @@ function MarkdownEditorComponent(props) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   var editorOptions = React.useMemo(function () {
     return {
-      preset: props.preset || 'default',
+      preset: props.preset || 'full',
       initial: {
         markup: props.initialValue || '',
         mode: props.initialMode || 'wysiwyg',
         toolbarVisible: props.toolbarVisible !== false,
       },
       md: props.mdOptions || {},
+      handlers: props.fileUploadHandler
+        ? { uploadFile: props.fileUploadHandler }
+        : undefined,
+      wysiwygConfig:
+        props.extensionOptions && Object.keys(props.extensionOptions).length > 0
+          ? { extensionOptions: props.extensionOptions }
+          : undefined,
     };
   }, []); // empty deps — intentional one-time initialisation
 
@@ -159,12 +168,15 @@ angular
    */
   .provider('markdownEditorConfig', function MarkdownEditorConfigProvider() {
     var defaults = {
-      preset: 'default',
+      preset: 'full',
       initialMode: 'wysiwyg',
       toolbarVisible: true,
       stickyToolbar: true,
       theme: 'light',
       mdOptions: {},
+      lang: 'en',               // 'en' | 'ru' — ready for 'es' when translations are added
+      fileUploadHandler: null,  // function(File) → Promise<{url, name?, type?}>
+      extensionOptions: {},     // options forwarded to wysiwygConfig.extensionOptions
     };
 
     /**
@@ -201,12 +213,15 @@ angular
    *
    * Options object
    * --------------
-   * preset          {string}   'zero'|'commonmark'|'default'|'yfm'|'full'  (default: 'default')
-   * initialMode     {string}   'wysiwyg'|'markup'                           (default: 'wysiwyg')
-   * toolbarVisible  {boolean}  Show toolbar on load.                        (default: true)
-   * stickyToolbar   {boolean}  Sticky toolbar behaviour.                    (default: true)
-   * theme           {string}   'light'|'dark'|'light-hc'|'dark-hc'         (default: 'light')
-   * mdOptions       {object}   markdown-it options: { html, breaks, linkify }
+   * preset              {string}    'zero'|'commonmark'|'default'|'yfm'|'full'  (default: 'full')
+   * initialMode         {string}    'wysiwyg'|'markup'                           (default: 'wysiwyg')
+   * toolbarVisible      {boolean}   Show toolbar on load.                        (default: true)
+   * stickyToolbar       {boolean}   Sticky toolbar behaviour.                    (default: true)
+   * theme               {string}    'light'|'dark'|'light-hc'|'dark-hc'         (default: 'light')
+   * mdOptions           {object}    markdown-it options: { html, breaks, linkify }
+   * lang                {string}    UI language: 'en'|'ru'                       (default: 'en')
+   * fileUploadHandler   {function}  function(File) → Promise<{url, name?, type?}>
+   * extensionOptions    {object}    Options forwarded to wysiwygConfig.extensionOptions
    *
    * Example
    * -------
@@ -294,29 +309,48 @@ angular
           }
 
           // ------------------------------------------------------------------
+          // Render (or re-render) the React component with current opts.
+          // Re-calling render() updates props on the existing React tree via
+          // reconciliation — the editor instance and its state are preserved.
+          // Only ThemeProvider (theme) and MarkdownEditorView (stickyToolbar)
+          // respond to prop updates; editor options are one-time on mount.
+          // ------------------------------------------------------------------
+          var attrInitialValue = attrs.value || '';
+
+          function renderEditor() {
+            reactRoot.render(
+              React.createElement(MarkdownEditorComponent, {
+                initialValue: attrInitialValue,
+                preset: opts.preset,
+                initialMode: opts.initialMode,
+                toolbarVisible: opts.toolbarVisible,
+                stickyToolbar: opts.stickyToolbar,
+                theme: opts.theme,
+                autofocus: attrs.autofocus !== undefined,
+                mdOptions: opts.mdOptions,
+                fileUploadHandler: opts.fileUploadHandler || null,
+                extensionOptions: opts.extensionOptions || {},
+                onChange: handleChange,
+                onSubmit: handleSubmit,
+                onCancel: handleCancel,
+                onEditorReady: handleEditorReady,
+              }),
+            );
+          }
+
+          // ------------------------------------------------------------------
           // Mount React component.
           // The editor always starts with an empty document (or attrs.value for
           // non-ng-model usage). The actual initial content for ng-model is
           // applied via ngModel.$render once AngularJS runs its first digest.
           // ------------------------------------------------------------------
-          var attrInitialValue = attrs.value || '';
           reactRoot = createRoot(container);
-          reactRoot.render(
-            React.createElement(MarkdownEditorComponent, {
-              initialValue: attrInitialValue,
-              preset: opts.preset,
-              initialMode: opts.initialMode,
-              toolbarVisible: opts.toolbarVisible,
-              stickyToolbar: opts.stickyToolbar,
-              theme: opts.theme,
-              autofocus: attrs.autofocus !== undefined,
-              mdOptions: opts.mdOptions,
-              onChange: handleChange,
-              onSubmit: handleSubmit,
-              onCancel: handleCancel,
-              onEditorReady: handleEditorReady,
-            }),
-          );
+
+          // Apply the locale before the first render so the editor UI uses the
+          // requested language from the very first mount.
+          configure({ lang: opts.lang || 'en' });
+
+          renderEditor();
 
           // ------------------------------------------------------------------
           // Sync external ng-model changes into the editor.
@@ -338,12 +372,16 @@ angular
             };
           }
 
-          // React to options changes (e.g. theme switch)
+          // React to options changes (e.g. theme switch at runtime).
+          // Re-rendering the React root propagates updated props to
+          // ThemeProvider and MarkdownEditorView via reconciliation.
           scope.$watch(
             'options',
             function (newOpts) {
               if (newOpts) {
                 opts = angular.extend({}, markdownEditorConfig, newOpts);
+                configure({ lang: opts.lang || 'en' });
+                renderEditor();
               }
             },
             true,

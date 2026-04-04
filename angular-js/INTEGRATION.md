@@ -108,11 +108,12 @@ angular.module('miApp', ['markdownEditor']);
       // Configuración global (opcional)
       .config(function (markdownEditorConfigProvider) {
         markdownEditorConfigProvider.setDefaults({
-          preset:         'default',
+          preset:         'full',
           theme:          'light',
           initialMode:    'wysiwyg',
           toolbarVisible: true,
-          stickyToolbar:  true
+          stickyToolbar:  true,
+          lang:           'en'
         });
       })
 
@@ -120,7 +121,7 @@ angular.module('miApp', ['markdownEditor']);
         var editor = null;
 
         $scope.documento = '# Hola mundo\n\nEmpieza a escribir aquí...';
-        $scope.opciones  = { preset: 'default', theme: 'light' };
+        $scope.opciones  = { preset: 'full', theme: 'light' };
 
         $scope.alCargar = function ($editor) {
           editor = $editor;
@@ -171,14 +172,17 @@ angular.module('miApp', ['markdownEditor']);
 
 ### Opciones disponibles
 
-| Clave            | Tipo      | Valor por defecto | Descripción |
-|------------------|-----------|-------------------|-------------|
-| `preset`         | `string`  | `'default'`       | Conjunto de funciones: `'zero'` · `'commonmark'` · `'default'` · `'yfm'` · `'full'` |
-| `initialMode`    | `string`  | `'wysiwyg'`       | Modo inicial: `'wysiwyg'` o `'markup'` |
-| `toolbarVisible` | `boolean` | `true`            | Mostrar barra de herramientas al cargar |
-| `stickyToolbar`  | `boolean` | `true`            | Barra de herramientas fija al hacer scroll |
-| `theme`          | `string`  | `'light'`         | Tema de color: `'light'` · `'dark'` · `'light-hc'` · `'dark-hc'` |
-| `mdOptions`      | `object`  | `{}`              | Opciones para markdown-it: `{ html, breaks, linkify }` |
+| Clave                | Tipo       | Valor por defecto | Descripción |
+|----------------------|------------|-------------------|-------------|
+| `preset`             | `string`   | `'full'`          | Conjunto de funciones: `'zero'` · `'commonmark'` · `'default'` · `'yfm'` · `'full'` |
+| `initialMode`        | `string`   | `'wysiwyg'`       | Modo inicial: `'wysiwyg'` o `'markup'` |
+| `toolbarVisible`     | `boolean`  | `true`            | Mostrar barra de herramientas al cargar |
+| `stickyToolbar`      | `boolean`  | `true`            | Barra de herramientas fija al hacer scroll |
+| `theme`              | `string`   | `'light'`         | Tema de color: `'light'` · `'dark'` · `'light-hc'` · `'dark-hc'` |
+| `mdOptions`          | `object`   | `{}`              | Opciones para markdown-it: `{ html, breaks, linkify }` |
+| `lang`               | `string`   | `'en'`            | Idioma de la interfaz: `'en'` (inglés) o `'ru'` (ruso) |
+| `fileUploadHandler`  | `function` | `null`            | `function(File) → Promise<{url, name?, type?}>` — habilita subida de imágenes/archivos |
+| `extensionOptions`   | `object`   | `{}`              | Opciones por extensión, pasadas a `wysiwygConfig.extensionOptions` |
 
 ---
 
@@ -206,4 +210,52 @@ $scope.editor.hasFocus();                      // → boolean
 // Modo de edición
 $scope.editor.setEditorMode('wysiwyg');        // o 'markup'
 $scope.editor.currentMode;                     // → 'wysiwyg' | 'markup'
+```
+
+---
+
+## Subida de archivos / imágenes
+
+Habilita la carga de imágenes desde el dispositivo proporcionando `fileUploadHandler`:
+
+```javascript
+$scope.opciones = {
+  preset: 'full',
+  fileUploadHandler: function (file) {
+    var formData = new FormData();
+    formData.append('file', file);
+    return $http.post('/api/upload', formData, {
+      headers: { 'Content-Type': undefined }
+    }).then(function (resp) {
+      return { url: resp.data.url, name: file.name, type: file.type };
+    });
+  }
+};
+```
+
+---
+
+## Cambio de tema en runtime
+
+Cambia `options.theme` en cualquier momento para alternar entre modo claro y oscuro sin recargar la página:
+
+```javascript
+$scope.toggleTheme = function () {
+  $scope.opciones = angular.extend({}, $scope.opciones, {
+    theme: $scope.opciones.theme === 'dark' ? 'light' : 'dark'
+  });
+};
+```
+
+---
+
+## HTML embebido en Markdown
+
+Para contenido legacy con HTML, habilita el parsing de HTML en markdown-it:
+
+```javascript
+$scope.opciones = {
+  preset: 'full',
+  mdOptions: { html: true, breaks: true, linkify: true }
+};
 ```
