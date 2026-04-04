@@ -79,7 +79,9 @@ function MarkdownEditorComponent(props) {
 
   React.useEffect(function () {
     var container = document.createElement('div');
-    container.className = 'g-root g-root_theme_' + (props.theme || 'light');
+    // Theme class is intentionally set to 'light' here; the theme-sync
+    // effect below will immediately correct it to the actual initial theme.
+    container.className = 'g-root g-root_theme_light';
     container.style.cssText = 'position:absolute;top:0;left:0;z-index:1070;';
     container.setAttribute('data-md-editor-portals', '');
     document.body.appendChild(container);
@@ -90,7 +92,7 @@ function MarkdownEditorComponent(props) {
         container.parentNode.removeChild(container);
       }
     };
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps — only on mount/unmount
+  }, []); // mount/unmount only — theme updates are handled by the effect below
 
   // Keep portal container theme class in sync with props.theme at runtime.
   React.useEffect(
@@ -111,8 +113,7 @@ function MarkdownEditorComponent(props) {
     // These are not included in preset 'full' and must be registered
     // explicitly. Runtime scripts are loaded via webpack lazy chunks.
     // ----------------------------------------------------------------
-    var hasExtras = props.mathEnabled !== false || props.mermaidEnabled !== false || props.htmlBlockEnabled !== false;
-    var extensions = hasExtras
+    var extensions = (props.mathEnabled !== false || props.mermaidEnabled !== false || props.htmlBlockEnabled !== false)
       ? function (builder) {
           if (props.mathEnabled !== false) {
             builder.use(MathExtension, {
@@ -144,7 +145,7 @@ function MarkdownEditorComponent(props) {
     // items for the extra extensions that are enabled. The user can
     // override this via extensionOptions.commandMenu.actions.
     // ----------------------------------------------------------------
-    var commandMenuActions = wysiwygToolbarConfigs.wCommandMenuConfig.slice();
+    var commandMenuActions = (wysiwygToolbarConfigs.wCommandMenuConfig || []).slice();
     if (props.mathEnabled !== false) {
       commandMenuActions = commandMenuActions.concat([
         wysiwygToolbarConfigs.wMathInlineItemData,

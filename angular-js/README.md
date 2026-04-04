@@ -92,6 +92,10 @@ That's it. The editor is now embedded in your AngularJS application.
 
 Pass an object to the `options` attribute (or set global defaults via the provider):
 
+> **Migration note:** The default `preset` was changed from `'default'` to `'full'` to give
+> new integrations the maximum feature set out of the box. If you need the old minimal
+> feature set, set `preset: 'default'` explicitly.
+
 | Key                  | Type       | Default      | Description |
 |----------------------|------------|--------------|-------------|
 | `preset`             | `string`   | `'full'`     | Feature set: `'zero'` · `'commonmark'` · `'default'` · `'yfm'` · `'full'` |
