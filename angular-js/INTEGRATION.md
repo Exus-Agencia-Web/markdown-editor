@@ -259,3 +259,9 @@ $scope.opciones = {
   mdOptions: { html: true, breaks: true, linkify: true }
 };
 ```
+
+> ⚠️ **Advertencia de seguridad:** Habilitar `html: true` permite que HTML sin procesar se
+> renderice en el contenido Markdown. Si el contenido proviene de fuentes no confiables (por
+> ejemplo, entrada directa del usuario final), esto puede introducir vulnerabilidades XSS.
+> Usa esta opción únicamente con contenido de confianza (contenido interno del sistema o
+> previamente saneado) o aplica un proceso de sanitización antes de mostrarlo.

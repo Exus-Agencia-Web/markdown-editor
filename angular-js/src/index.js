@@ -174,7 +174,7 @@ angular
       stickyToolbar: true,
       theme: 'light',
       mdOptions: {},
-      lang: 'en',               // 'en' | 'ru' — ready for 'es' when translations are added
+      lang: 'en',               // 'en' | 'ru' — see upstream i18n for future language additions
       fileUploadHandler: null,  // function(File) → Promise<{url, name?, type?}>
       extensionOptions: {},     // options forwarded to wysiwygConfig.extensionOptions
     };

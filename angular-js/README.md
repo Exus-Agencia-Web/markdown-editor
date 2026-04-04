@@ -170,6 +170,17 @@ Set the UI language via the `lang` option. Currently `'en'` (English, default) a
 markdownEditorConfigProvider.setDefaults({ lang: 'ru' });
 ```
 
+Changing `lang` at runtime (via the `options` binding) takes effect on the next re-render.
+Because the directive watches `options` with deep equality, assigning a new object to `options`
+is enough to trigger the update:
+
+```javascript
+$scope.editorOptions = angular.extend({}, $scope.editorOptions, { lang: 'ru' });
+```
+
+> **Note:** `lang` controls the editor's own UI labels (toolbar tooltips, placeholders, etc.).
+> It does not affect the markdown content itself.
+
 ---
 
 ## Runtime Theme Switching
