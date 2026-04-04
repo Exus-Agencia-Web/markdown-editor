@@ -104,7 +104,7 @@ Pass an object to the `options` attribute (or set global defaults via the provid
 | `stickyToolbar`      | `boolean`  | `true`       | Keep the toolbar visible while scrolling |
 | `theme`              | `string`   | `'light'`    | Color theme: `'light'` · `'dark'` · `'light-hc'` · `'dark-hc'` |
 | `mdOptions`          | `object`   | `{}`         | Options forwarded to markdown-it: `{ html, breaks, linkify }` |
-| `lang`               | `string`   | `'en'`       | UI language: `'en'` (English) or `'ru'` (Russian) |
+| `lang`               | `string`   | `'es'`       | UI language: `'en'` (English), `'ru'` (Russian) or `'es'` (Spanish) |
 | `fileUploadHandler`  | `function` | `null`       | `function(File) → Promise<{url, name?, type?}>` — enables image/file upload |
 | `extensionOptions`   | `object`   | `{}`         | Per-extension options forwarded to `wysiwygConfig.extensionOptions` |
 | `mathEnabled`        | `boolean`  | `true`       | Register the LaTeX Math extension (runtime loaded lazily via webpack chunk) |
@@ -127,7 +127,7 @@ angular.module('myApp', ['markdownEditor'])
       initialMode:   'markup',
       toolbarVisible: true,
       stickyToolbar:  true,
-      lang:           'en',
+      lang:           'es',
       mdOptions: {
         html:    false,
         breaks:  true,
@@ -170,8 +170,8 @@ $scope.editorOptions = {
 
 ## i18n / Locale
 
-Set the UI language via the `lang` option. Currently `'en'` (English, default) and `'ru'`
-(Russian) are supported. The option is also accepted at the provider level:
+Set the UI language via the `lang` option. `'en'` (English), `'ru'` (Russian), and `'es'`
+(Spanish, default) are supported. The option is also accepted at the provider level:
 
 ```javascript
 markdownEditorConfigProvider.setDefaults({ lang: 'ru' });
@@ -182,7 +182,7 @@ Because the directive watches `options` with deep equality, assigning a new obje
 is enough to trigger the update:
 
 ```javascript
-$scope.editorOptions = angular.extend({}, $scope.editorOptions, { lang: 'ru' });
+$scope.editorOptions = angular.extend({}, $scope.editorOptions, { lang: 'en' });
 ```
 
 > **Note:** `lang` controls the editor's own UI labels (toolbar tooltips, placeholders, etc.).

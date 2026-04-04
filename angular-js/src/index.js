@@ -19,6 +19,8 @@ import {
   MarkdownEditorView,
   wysiwygToolbarConfigs,
 } from '@gravity-ui/markdown-editor';
+import { i18n as editorI18n } from '@gravity-ui/markdown-editor/i18n';
+import { esTranslations } from './i18n/es';
 import { Math as MathExtension } from '@gravity-ui/markdown-editor/extensions/additional/Math/index.js';
 import { Mermaid } from '@gravity-ui/markdown-editor/extensions/additional/Mermaid/index.js';
 import { YfmHtmlBlock } from '@gravity-ui/markdown-editor/extensions/additional/YfmHtmlBlock/index.js';
@@ -29,6 +31,16 @@ import '@gravity-ui/uikit/styles/styles.css';
 import '@gravity-ui/markdown-editor/styles/styles.css';
 
 /* global angular */
+
+// ---------------------------------------------------------------------------
+// Register Spanish translations at module load time.
+// The @gravity-ui/markdown-editor/i18n export exposes the same i18n singleton
+// used internally by the editor, so keysets registered here take effect for
+// all editor instances in this bundle.
+// ---------------------------------------------------------------------------
+Object.keys(esTranslations).forEach(function (keyset) {
+  editorI18n.registerKeyset('es', keyset, esTranslations[keyset]);
+});
 
 // ---------------------------------------------------------------------------
 // React wrapper component
@@ -286,7 +298,7 @@ angular
       stickyToolbar: true,
       theme: 'light',
       mdOptions: {},
-      lang: 'en',               // 'en' | 'ru' — see packages/editor/src/configure.ts for supported languages
+      lang: 'es',               // 'en' | 'ru' | 'es' — see angular-js/src/i18n/es.js for Spanish translations
       fileUploadHandler: null,  // function(File) → Promise<{url, name?, type?}>
       extensionOptions: {},     // options forwarded to wysiwygConfig.extensionOptions
       mathEnabled: true,        // register LaTeX Math extension (requires @diplodoc/latex-extension)
@@ -334,7 +346,7 @@ angular
    * stickyToolbar       {boolean}   Sticky toolbar behaviour.                    (default: true)
    * theme               {string}    'light'|'dark'|'light-hc'|'dark-hc'         (default: 'light')
    * mdOptions           {object}    markdown-it options: { html, breaks, linkify }
-   * lang                {string}    UI language: 'en'|'ru'                       (default: 'en')
+   * lang                {string}    UI language: 'en'|'ru'|'es'                  (default: 'es')
    * fileUploadHandler   {function}  function(File) → Promise<{url, name?, type?}>
    * extensionOptions    {object}    Options forwarded to wysiwygConfig.extensionOptions
    * mathEnabled         {boolean}   Register LaTeX Math extension.               (default: true)
@@ -469,7 +481,7 @@ angular
 
           // Apply the locale before the first render so the editor UI uses the
           // requested language from the very first mount.
-          configure({ lang: opts.lang || 'en' });
+          configure({ lang: opts.lang || 'es' });
 
           renderEditor();
 
@@ -501,7 +513,7 @@ angular
             function (newOpts) {
               if (newOpts) {
                 opts = angular.extend({}, markdownEditorConfig, newOpts);
-                configure({ lang: opts.lang || 'en' });
+                configure({ lang: opts.lang || 'es' });
                 renderEditor();
               }
             },
