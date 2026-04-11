@@ -3,9 +3,11 @@ npm-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 
-# Development bundle (large – run `npm run build:dev` to generate)
-dist/angular-markdown-editor.js
-dist/*.chunk.js
+# Build output (run `npm run build` to generate)
+dist/
+
+# npm lock file (this sub-package is not published; lock is not needed in VCS)
+package-lock.json
 
 # Local vendor copies for development/testing only (use CDN in production)
 vendor/
