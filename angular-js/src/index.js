@@ -359,6 +359,220 @@ function MarkdownEditorComponent(props) {
 }
 
 // ---------------------------------------------------------------------------
+// window.MarkdownEditor.create() — framework-agnostic factory
+// ---------------------------------------------------------------------------
+
+/**
+ * Create a standalone Markdown editor inside any DOM element.
+ *
+ * This factory does NOT require AngularJS — it mounts a React root directly
+ * on the supplied element and returns a plain controller object.
+ *
+ * @param {HTMLElement} element - DOM element to mount the editor into.
+ * @param {object}      [options]                   - Editor options.
+ * @param {string}      [options.initialValue='']   - Initial markdown content.
+ * @param {string}      [options.preset='full']     - Editor preset ('zero'|'commonmark'|'default'|'yfm'|'full').
+ * @param {string}      [options.initialMode='wysiwyg'] - 'wysiwyg' | 'markup'.
+ * @param {boolean}     [options.toolbarVisible=true]   - Show toolbar on load.
+ * @param {boolean}     [options.stickyToolbar=true]    - Sticky toolbar behaviour.
+ * @param {string}      [options.theme='light']         - 'light'|'dark'|'light-hc'|'dark-hc'.
+ * @param {boolean}     [options.autofocus=false]       - Autofocus on mount.
+ * @param {object}      [options.mdOptions]             - markdown-it options.
+ * @param {string}      [options.lang='es']             - UI language: 'en'|'ru'|'es'.
+ * @param {function}    [options.fileUploadHandler]     - function(File) → Promise<{url, name?, type?}>.
+ * @param {object}      [options.extensionOptions]      - Options forwarded to wysiwygConfig.extensionOptions.
+ * @param {boolean}     [options.mathEnabled=true]      - Register LaTeX Math extension.
+ * @param {boolean}     [options.mermaidEnabled=true]   - Register Mermaid diagram extension.
+ * @param {boolean}     [options.htmlBlockEnabled=true]  - Register HTML Block extension.
+ *
+ * @returns {object} controller
+ * @returns {function} controller.getValue          - Returns the current markdown string.
+ * @returns {function} controller.replace           - Replace the editor content with a new markdown string.
+ * @returns {function} controller.destroy           - Unmount the editor and clean up.
+ * @returns {function} controller.on                - Subscribe to an event ('change'|'submit'|'cancel').
+ * @returns {function} controller.off               - Unsubscribe from an event.
+ *
+ * @example
+ *   var editor = window.MarkdownEditor.create(
+ *     document.getElementById('editor'),
+ *     { initialValue: '# Hello', theme: 'dark', preset: 'full' }
+ *   );
+ *
+ *   editor.on('change', function(value) { console.log('Content:', value); });
+ *   console.log(editor.getValue());
+ *   editor.replace('# New content');
+ *   editor.destroy();
+ */
+function createMarkdownEditor(element, options) {
+  if (!element || !(element instanceof HTMLElement)) {
+    throw new Error('MarkdownEditor.create(): first argument must be an HTMLElement');
+  }
+
+  var opts = Object.assign(
+    {
+      initialValue: '',
+      preset: 'full',
+      initialMode: 'wysiwyg',
+      toolbarVisible: true,
+      stickyToolbar: true,
+      theme: 'light',
+      autofocus: false,
+      mdOptions: {},
+      lang: 'es',
+      fileUploadHandler: null,
+      extensionOptions: {},
+      mathEnabled: true,
+      mermaidEnabled: true,
+      htmlBlockEnabled: true,
+    },
+    options || {},
+  );
+
+  // Event listeners: { change: [fn, fn], submit: [fn], cancel: [fn] }
+  var listeners = {};
+  var editorInstance = null;
+  var destroyed = false;
+
+  // Apply locale before mounting
+  configure({ lang: opts.lang || 'es' });
+
+  var reactRoot = createRoot(element);
+
+  // Internal bridge callbacks invoked by MarkdownEditorComponent
+  function handleChange(value) {
+    _emit('change', value);
+  }
+
+  function handleSubmit(value) {
+    _emit('submit', value);
+  }
+
+  function handleCancel() {
+    _emit('cancel');
+  }
+
+  function handleEditorReady(editor) {
+    editorInstance = editor;
+  }
+
+  /** Emit an event to all registered listeners for the given event name. */
+  function _emit(eventName) {
+    var cbs = listeners[eventName];
+    if (!cbs) return;
+    var args = Array.prototype.slice.call(arguments, 1);
+    for (var i = 0; i < cbs.length; i++) {
+      try {
+        cbs[i].apply(null, args);
+      } catch (e) {
+        console.error('[MarkdownEditor]', eventName, 'listener error:', e);
+      }
+    }
+  }
+
+  // Mount the React component
+  reactRoot.render(
+    React.createElement(MarkdownEditorComponent, {
+      initialValue: opts.initialValue,
+      preset: opts.preset,
+      initialMode: opts.initialMode,
+      toolbarVisible: opts.toolbarVisible,
+      stickyToolbar: opts.stickyToolbar,
+      theme: opts.theme,
+      autofocus: opts.autofocus,
+      mdOptions: opts.mdOptions,
+      fileUploadHandler: opts.fileUploadHandler,
+      extensionOptions: opts.extensionOptions,
+      mathEnabled: opts.mathEnabled,
+      mermaidEnabled: opts.mermaidEnabled,
+      htmlBlockEnabled: opts.htmlBlockEnabled,
+      onChange: handleChange,
+      onSubmit: handleSubmit,
+      onCancel: handleCancel,
+      onEditorReady: handleEditorReady,
+    }),
+  );
+
+  // --- Controller object returned to the caller ---
+  var controller = {
+    /**
+     * Get the current markdown content.
+     * @returns {string} Markdown string.
+     */
+    getValue: function () {
+      if (destroyed) throw new Error('MarkdownEditor: editor has been destroyed');
+      return editorInstance ? editorInstance.getValue() : opts.initialValue;
+    },
+
+    /**
+     * Replace the entire editor content with new markdown.
+     * @param {string} md - New markdown string.
+     */
+    replace: function (md) {
+      if (destroyed) throw new Error('MarkdownEditor: editor has been destroyed');
+      if (editorInstance) {
+        editorInstance.replace(md);
+      }
+    },
+
+    /**
+     * Unmount the editor and clean up all resources.
+     */
+    destroy: function () {
+      if (destroyed) return;
+      destroyed = true;
+      if (reactRoot) {
+        reactRoot.unmount();
+        reactRoot = null;
+      }
+      editorInstance = null;
+      listeners = {};
+    },
+
+    /**
+     * Subscribe to an editor event.
+     * @param {string}   event - Event name: 'change', 'submit', or 'cancel'.
+     * @param {function} cb    - Callback function.
+     * @returns {object} The controller (for chaining).
+     */
+    on: function (event, cb) {
+      if (typeof cb !== 'function') {
+        throw new Error('MarkdownEditor.on(): callback must be a function');
+      }
+      if (!listeners[event]) {
+        listeners[event] = [];
+      }
+      listeners[event].push(cb);
+      return controller;
+    },
+
+    /**
+     * Unsubscribe from an editor event.
+     * @param {string}   event - Event name.
+     * @param {function} cb    - The exact function reference passed to .on().
+     * @returns {object} The controller (for chaining).
+     */
+    off: function (event, cb) {
+      var cbs = listeners[event];
+      if (!cbs) return controller;
+      listeners[event] = cbs.filter(function (fn) {
+        return fn !== cb;
+      });
+      return controller;
+    },
+  };
+
+  return controller;
+}
+
+// Expose globally as window.MarkdownEditor.create()
+if (typeof window !== 'undefined') {
+  window.MarkdownEditor = window.MarkdownEditor || {};
+  window.MarkdownEditor.create = createMarkdownEditor;
+  // Also expose the render helper under the same namespace
+  window.MarkdownEditor.render = renderMarkdown;
+}
+
+// ---------------------------------------------------------------------------
 // AngularJS module
 // ---------------------------------------------------------------------------
 
