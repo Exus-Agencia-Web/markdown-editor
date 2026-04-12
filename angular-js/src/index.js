@@ -34,6 +34,8 @@ import { transform as tabsPlugin } from '@diplodoc/tabs-extension';
 import { transform as cutPlugin } from '@diplodoc/cut-extension';
 import yfmNotesPlugin from '@diplodoc/transform/lib/plugins/notes/index.js';
 import yfmTablePlugin from '@diplodoc/transform/lib/plugins/table/index.js';
+import insPlugin from 'markdown-it-ins';
+import checkboxPlugin from '@diplodoc/transform/lib/plugins/checkbox/index.js';
 
 // Required styles
 import '@gravity-ui/uikit/styles/fonts.css';
@@ -93,6 +95,10 @@ function _createMd(opts) {
   md.use(yfmNotesPlugin, { log: _yfmLog, lang: 'en' });
   // YFM tables  (extended || … || syntax)
   md.use(yfmTablePlugin, { log: _yfmLog });
+  // ++underline++ → <ins>underline</ins>
+  md.use(insPlugin);
+  // Checkbox task lists: - [ ] text / - [x] text
+  md.use(checkboxPlugin, { idPrefix: 'md-checkbox-', divClass: 'yfm-checkbox' });
   return md;
 }
 
@@ -185,9 +191,12 @@ function MarkdownEditorComponent(props) {
     // Theme class is intentionally set to 'light' here; the theme-sync
     // effect below will immediately correct it to the actual initial theme.
     container.className = 'g-root g-root_theme_light';
-    container.style.cssText = 'position:absolute;top:0;left:0;z-index:1070;';
+    container.style.cssText = 'position:fixed;top:0;left:0;width:0;height:0;overflow:visible;z-index:10000;';
     container.setAttribute('data-md-editor-portals', '');
-    document.body.appendChild(container);
+    // Append to the caller-supplied host (e.g. .cdk-overlay-container) so that
+    // the portal shares the same stacking context as the surrounding modal.
+    var host = (props.portalTarget instanceof HTMLElement) ? props.portalTarget : document.body;
+    host.appendChild(container);
     setPortalContainer(container);
 
     return function () {
@@ -424,6 +433,10 @@ function createMarkdownEditor(element, options) {
       mathEnabled: true,
       mermaidEnabled: true,
       htmlBlockEnabled: true,
+      // DOM element where gravity-ui portals (tooltips, dropdowns) are appended.
+      // Pass document.querySelector('.cdk-overlay-container') when used inside
+      // an Angular Material dialog to share the same stacking context as the modal.
+      portalTarget: null,
     },
     options || {},
   );
@@ -432,6 +445,8 @@ function createMarkdownEditor(element, options) {
   var listeners = {};
   var editorInstance = null;
   var destroyed = false;
+  // Value queued via replace() before React fires onEditorReady
+  var pendingReplace = null;
 
   // Apply locale before mounting
   configure({ lang: opts.lang || 'es' });
@@ -453,6 +468,11 @@ function createMarkdownEditor(element, options) {
 
   function handleEditorReady(editor) {
     editorInstance = editor;
+    // Flush any replace() call that arrived before the editor was ready
+    if (pendingReplace !== null) {
+      editorInstance.replace(pendingReplace);
+      pendingReplace = null;
+    }
   }
 
   /** Emit an event to all registered listeners for the given event name. */
@@ -469,15 +489,19 @@ function createMarkdownEditor(element, options) {
     }
   }
 
-  // Mount the React component
-  reactRoot.render(
-    React.createElement(MarkdownEditorComponent, {
+  // Current mutable props that can be updated at runtime
+  var currentTheme = opts.theme;
+  var currentLang = opts.lang || 'es';
+
+  /** Build the props object for the React component */
+  function buildProps() {
+    return {
       initialValue: opts.initialValue,
       preset: opts.preset,
       initialMode: opts.initialMode,
       toolbarVisible: opts.toolbarVisible,
       stickyToolbar: opts.stickyToolbar,
-      theme: opts.theme,
+      theme: currentTheme,
       autofocus: opts.autofocus,
       mdOptions: opts.mdOptions,
       fileUploadHandler: opts.fileUploadHandler,
@@ -485,12 +509,23 @@ function createMarkdownEditor(element, options) {
       mathEnabled: opts.mathEnabled,
       mermaidEnabled: opts.mermaidEnabled,
       htmlBlockEnabled: opts.htmlBlockEnabled,
+      portalTarget: opts.portalTarget || null,
       onChange: handleChange,
       onSubmit: handleSubmit,
       onCancel: handleCancel,
       onEditorReady: handleEditorReady,
-    }),
-  );
+    };
+  }
+
+  /** Re-render the React tree with current props (updates ThemeProvider etc.) */
+  function rerender() {
+    if (!destroyed && reactRoot) {
+      reactRoot.render(React.createElement(MarkdownEditorComponent, buildProps()));
+    }
+  }
+
+  // Mount the React component
+  rerender();
 
   // --- Controller object returned to the caller ---
   var controller = {
@@ -511,6 +546,9 @@ function createMarkdownEditor(element, options) {
       if (destroyed) throw new Error('MarkdownEditor: editor has been destroyed');
       if (editorInstance) {
         editorInstance.replace(md);
+      } else {
+        // Editor not ready yet — queue; handleEditorReady will flush it
+        pendingReplace = md;
       }
     },
 
@@ -526,6 +564,31 @@ function createMarkdownEditor(element, options) {
       }
       editorInstance = null;
       listeners = {};
+    },
+
+    /**
+     * Change the editor's visual theme at runtime.
+     * @param {string} newTheme - 'light'|'dark'|'light-hc'|'dark-hc'.
+     */
+    setTheme: function (newTheme) {
+      if (destroyed) throw new Error('MarkdownEditor: editor has been destroyed');
+      if (newTheme && newTheme !== currentTheme) {
+        currentTheme = newTheme;
+        rerender();
+      }
+    },
+
+    /**
+     * Change the editor's UI language at runtime.
+     * @param {string} lang - 'en'|'ru'|'es'.
+     */
+    setLang: function (lang) {
+      if (destroyed) throw new Error('MarkdownEditor: editor has been destroyed');
+      if (lang && lang !== currentLang) {
+        currentLang = lang;
+        configure({ lang: lang });
+        rerender();
+      }
     },
 
     /**

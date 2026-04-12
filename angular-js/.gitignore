@@ -3,9 +3,8 @@ npm-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 
-# Development bundle (large – run `npm run build:dev` to generate)
-dist/angular-markdown-editor.js
-dist/*.chunk.js
+# Build output (production & development bundles, chunks, fonts, CSS, etc.)
+dist/
 
 # Local vendor copies for development/testing only (use CDN in production)
 vendor/
