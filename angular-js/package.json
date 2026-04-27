@@ -8,6 +8,7 @@
     "build:dev": "webpack --mode=development --config webpack.config.js"
   },
   "dependencies": {
+    "@diplodoc/color-extension": "0.1.1",
     "@diplodoc/cut-extension": "^1.1.0",
     "@diplodoc/html-extension": "^2.9.1",
     "@diplodoc/latex-extension": "^1.4.1",
