@@ -6,6 +6,54 @@ const CssMinimizerPlugin = require('css-minimizer-webpack-plugin');
 module.exports = (env, argv) => {
   const isProd = argv.mode === 'production';
 
+  // ── Scoped-CSS pipeline ──
+  // Prefix every selector emitted by the editor's CSS (gravity-ui, prosemirror,
+  // markdown-it, etc.) with `.g-root`. The React tree wraps the editor in a
+  // ThemeProvider that always carries `g-root`, so editor styling still works,
+  // but global resets like `body { font-size: 13px }` no longer leak to the
+  // surrounding CRM page.
+  const ROOT_RE = /^(:root|html|body)\b/;
+  const SKIP_AT_RULES = new Set(['keyframes', 'font-face', 'media', 'supports']);
+  const postcssPrefixOptions = {
+    prefix: '.g-root',
+    transform(prefix, selector, prefixedSelector, filePath, rule) {
+      // Skip declarations inside @keyframes / @font-face — they are not real
+      // selectors and prefixing them produces invalid CSS.
+      let parent = rule && rule.parent;
+      while (parent) {
+        if (parent.type === 'atrule' && SKIP_AT_RULES.has(parent.name)) {
+          return selector;
+        }
+        parent = parent.parent;
+      }
+      // Skip every selector that already targets gravity-ui's own classes —
+      // they live exclusively inside the React tree (which carries `.g-root`)
+      // and inside body-level portals (`.g-root_theme_*`). Prefixing them
+      // would break compound selectors like `.g-root.g-root_theme_light`.
+      if (selector.startsWith('.g-')) return selector;
+      // Universal selectors must remain descendants.
+      if (selector === '*' || selector === '*::before' || selector === '*::after') {
+        return prefix + ' ' + selector;
+      }
+      // Global resets on :root/html/body collapse onto the .g-root container,
+      // which acts as the editor's local root.
+      if (ROOT_RE.test(selector)) {
+        return selector.replace(ROOT_RE, prefix);
+      }
+      return prefixedSelector;
+    },
+  };
+  const postcssLoaderUse = {
+    loader: 'postcss-loader',
+    options: {
+      postcssOptions: {
+        plugins: [
+          ['postcss-prefix-selector', postcssPrefixOptions],
+        ],
+      },
+    },
+  };
+
   return {
     entry: './src/index.js',
     output: {
@@ -57,6 +105,7 @@ module.exports = (env, argv) => {
           use: [
             MiniCssExtractPlugin.loader,
             { loader: 'css-loader', options: { url: true } },
+            postcssLoaderUse,
           ],
         },
         {
@@ -64,6 +113,7 @@ module.exports = (env, argv) => {
           use: [
             MiniCssExtractPlugin.loader,
             { loader: 'css-loader', options: { url: true } },
+            postcssLoaderUse,
             {
               loader: 'sass-loader',
               options: {
